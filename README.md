@@ -18,7 +18,11 @@ Windows engineering preview. Export has passed specific glyph and kerning checks
 
 ## Draw and export a glyph
 
-Create a UFO source or open one made by this build, choose a glyph, and shape its outline. Set the advance width and a kerning pair, then save the editable UFO before exporting a TTF. Export checks the generated file with an independent parser; it does not establish general font compatibility.
+1. Use **New UFO** or open a UFO created by this build, then select or name a glyph.
+2. Create a contour and adjust its points, advance width, and a pair-kerning value.
+3. Save the editable outline, then choose **Export TTF**. The generated font is independently parsed before it replaces a prior export.
+
+External UFOs cannot yet be modified safely, and this bounded export is not a general font-compatibility claim.
 
 ## Build and use
 
