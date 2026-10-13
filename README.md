@@ -4,9 +4,9 @@
 
 **Draw the shape of a letter.**
 
-FontStrike gives a small type project an editable home. Create glyph contours in a UFO source, adjust widths and kerning pairs, save the source, and compile a TTF for a bounded review.
+FontStrike gives a small type project an editable home. Create glyph contours in a UFO source, adjust widths and kerning pairs, save the source, and export a TTF to inspect and test.
 
-### Highlights
+## Highlights
 
 - Draw and adjust glyph outlines.
 - Set advance widths and pair kerning.
