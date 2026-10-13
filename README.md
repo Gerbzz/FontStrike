@@ -4,10 +4,6 @@
 
 **Draw the shape of a letter, then keep it editable.** FontStrike is a small Windows type-design workspace for outlining glyphs, setting widths and kerning pairs, and exporting a TTF from a UFO source project.
 
-![FontStrike native editor showing a synthetic A glyph, outline points, width, and kerning controls](docs/images/fontstrike-desktop.png)
-
-*App-generated Windows capture of the synthetic `FontDemo.ufo` fixture. It shows the source outline editor; an in-app shaped text proof and independent pointer review are still pending.*
-
 [Try the source](#try-the-windows-preview) · [Detailed workflow and verification](docs/DEVELOPMENT.md) · [Third-party terms](THIRD_PARTY.md)
 
 ## Shape, space, and export
