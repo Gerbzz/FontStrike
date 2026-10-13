@@ -1,6 +1,26 @@
-# FontStrike Windows engineering preview
+# FontStrike
 
-FontStrike now includes a local Rust native glyph editing preview on the editable UFO 3 source core. It creates a 1000-UPM UFO with `.notdef` and space, lets the user create a closed contour for a named/Unicode glyph, drag and numerically edit points, change advance width and pair kerning, then save and reopen. The canvas marks baseline, cap height, x-height, descender, and advance bounds. Its geometry uses the pinned VectorCraft anchor model with tested screen-y-down to font-y-up conversion. **Export TTF** compiles this source with pinned fontc and checks the output with an independent parser before replacing a previous export.
+**by PWDS**
+
+**Draw the shape of a letter.**
+
+FontStrike gives a small type project an editable home. Create glyph contours in a UFO source, adjust widths and kerning pairs, save the source, and compile a TTF for a bounded review.
+
+### Highlights
+
+- Draw and adjust glyph outlines.
+- Set advance widths and pair kerning.
+- Keep editable UFO source and export a TTF.
+
+## Current status
+
+Windows engineering preview. Export has passed specific glyph and kerning checks, but a completed general-purpose font is not claimed. Editing arbitrary external UFOs, richer point tools, persistent recovery, accessibility, and broad font verification remain open.
+
+## Draw and export a glyph
+
+Create a UFO source or open one made by this build, choose a glyph, and shape its outline. Set the advance width and a kerning pair, then save the editable UFO before exporting a TTF. Export checks the generated file with an independent parser; it does not establish general font compatibility.
+
+## Build and use
 
 Launch on Windows from this directory:
 
