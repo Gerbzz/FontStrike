@@ -15,10 +15,6 @@
 
 FontStrike is a small Windows type-design workspace for outlining glyphs, setting widths and kerning pairs, and exporting a TTF from a UFO source project.
 
-![FontStrike desktop editor showing the original A glyph outline, metrics, and kerning controls](assets/screenshots/fontstrike-glyph-editor.png)
-
-*Earlier October 11 Windows editor checkpoint rendering its self-authored A/V demo UFO. Newer local UI source adds a “by PWDS” toolbar label that is not present in this image; a capture of that newer UI is pending.*
-
 <p align="center"><a href="#try-the-windows-preview">Try the source</a> · <a href="docs/DEVELOPMENT.md">Detailed workflow and verification</a> · <a href="THIRD_PARTY.md">Third-party terms</a> · <a href="assets/branding">Original artwork</a></p>
 
 ## Shape, space, and export
@@ -50,7 +46,7 @@ A fresh checkout needs registry access for uncached dependencies; add `--offline
 
 This is a **Windows engineering preview**, with no verified installer or complete general-purpose font claim. The accepted synthetic fixture compiled to TTF and passed independent table, outline, width, and AV/To kerning checks. External UFO editing, richer point tools, persistent recovery, shaped proof in the app, accessibility, and native pointer acceptance remain open.
 
-A retained October 11 desktop build whose three depfile source files match this public repository opened its built-in A/V demo and captured the full window. This image documents that earlier public-source checkpoint. A newer October 12 local UI change has not been built and captured, so current-version visual coverage remains pending. The bounded capture verifies startup and visible layout, not pointer editing or a new TTF export. [Screenshot provenance](docs/SCREENSHOT_PROVENANCE.md) records the source hashes and limits.
+A screenshot of the current local UI is pending. The newer October 12 toolbar change has not been built and captured, so the README does not present an older window as the current app.
 
 No first-party license grant is stated for FontStrike in this checkout. [THIRD_PARTY.md](THIRD_PARTY.md) records identified upstream material and its terms. Explore the other [PWDS Strike repositories](https://github.com/Gerbzz?tab=repositories&q=Strike).
 
