@@ -1,21 +1,70 @@
 {
   "app": "FontStrike",
   "asset": "assets/branding/FontStrike.png",
-  "method": "Lossless rectangular extraction of original pixels with ImageMagick. No scaling, recoloring, tracing, generation, transparency fabrication or animal changes. Original cream outside rounded corners retained. Labels excluded.",
-  "coordinate_system": "Origin top-left; crop bounds [left, top, right, bottom), right/bottom exclusive.",
-  "source_sha256": "333494969e42aa593769e0763a6eac98280ade672e395d528640a217d3dbfc13",
-  "crop_bounds": [
-    696,
-    0,
-    1352,
-    656
-  ],
+  "method": "Measured rounded alpha mask applied to the original 656x656 logo tile, then translated by whole pixels to center its visible bounds. Original visible RGB and masked visible RGBA were verified unchanged.",
+  "source_tile": {
+    "repository": "Gerbzz/FontStrike",
+    "commit": "32096cfaa1a4e482d31677be09730f77194a9e0a",
+    "path": "assets/branding/FontStrike.png",
+    "sha256": "6755863f1dbf1fc71b3577b4310906ef85c59685c41166f3ecabdb366a2c8c97",
+    "git_blob_sha": "0a68d2b7286869b0077dcb741855f950d7ed3e1d"
+  },
+  "mask_and_centering": {
+    "inset_pixels": 1.5,
+    "masked_alpha_bbox": [
+      18,
+      23,
+      640,
+      631
+    ],
+    "centered_alpha_bbox": [
+      17,
+      24,
+      639,
+      632
+    ],
+    "integer_translation": [
+      -1,
+      1
+    ],
+    "padding_ltrb": [
+      17,
+      24,
+      17,
+      24
+    ],
+    "original_visible_rgb_exact": true,
+    "masked_visible_rgba_exact": true,
+    "transparent_corners": true
+  },
   "dimensions": [
     656,
     656
   ],
-  "sha256": "6755863f1dbf1fc71b3577b4310906ef85c59685c41166f3ecabdb366a2c8c97",
-  "decoded_rgb_sha256": "c0b69c4c3f223d896da31a4e52a99ae13d5d60c8f1f86800d3bb8080524c5c53",
-  "pixel_equality_verified": true,
-  "git_blob_sha": "0a68d2b7286869b0077dcb741855f950d7ed3e1d"
+  "mode": "RGBA",
+  "sha256": "d763ddae624f18177794a625670b6b428df1b2834f2ea53bd62f49198c089343",
+  "decoded_rgba_sha256": "60cd1760f1753dc33308731a78b2b2656974c1a0217ae519b6e5c8a7dbc060e9",
+  "git_blob_sha": "8bfbd3304c298c66c1e236425da7ba7021377e41",
+  "tool": "ImageMagick 7.1.2-34 Q16 x64",
+  "original_tile_provenance": {
+    "app": "FontStrike",
+    "asset": "assets/branding/FontStrike.png",
+    "method": "Lossless rectangular extraction of original pixels with ImageMagick. No scaling, recoloring, tracing, generation, transparency fabrication or animal changes. Original cream outside rounded corners retained. Labels excluded.",
+    "coordinate_system": "Origin top-left; crop bounds [left, top, right, bottom), right/bottom exclusive.",
+    "source_sha256": "333494969e42aa593769e0763a6eac98280ade672e395d528640a217d3dbfc13",
+    "crop_bounds": [
+      696,
+      0,
+      1352,
+      656
+    ],
+    "dimensions": [
+      656,
+      656
+    ],
+    "sha256": "6755863f1dbf1fc71b3577b4310906ef85c59685c41166f3ecabdb366a2c8c97",
+    "decoded_rgb_sha256": "c0b69c4c3f223d896da31a4e52a99ae13d5d60c8f1f86800d3bb8080524c5c53",
+    "pixel_equality_verified": true,
+    "git_blob_sha": "0a68d2b7286869b0077dcb741855f950d7ed3e1d"
+  }
 }
