@@ -1,10 +1,14 @@
-# FontStrike
+<p align="center">
+  <img src="assets/branding/FontStrike.png" alt="Original FontStrike woodpecker logo" width="160" height="160">
+</p>
 
-**by PWDS**
+<h1 align="center">FontStrike</h1>
 
-**Draw the shape of a letter, then keep it editable.** FontStrike is a small Windows type-design workspace for outlining glyphs, setting widths and kerning pairs, and exporting a TTF from a UFO source project.
+<p align="center"><strong>by PWDS</strong><br><strong>Draw the shape of a letter, then keep it editable.</strong></p>
 
-[Try the source](#try-the-windows-preview) · [Detailed workflow and verification](docs/DEVELOPMENT.md) · [Third-party terms](THIRD_PARTY.md)
+FontStrike is a small Windows type-design workspace for outlining glyphs, setting widths and kerning pairs, and exporting a TTF from a UFO source project.
+
+<p align="center"><a href="#try-the-windows-preview">Try the source</a> · <a href="docs/DEVELOPMENT.md">Detailed workflow and verification</a> · <a href="THIRD_PARTY.md">Third-party terms</a> · <a href="assets/branding">Original artwork</a></p>
 
 ## Shape, space, and export
 
