@@ -4,7 +4,14 @@
 
 <h1 align="center">FontStrike</h1>
 
-<p align="center"><strong>by PWDS</strong><br><strong>Draw the shape of a letter, then keep it editable.</strong></p>
+<p align="center">
+  <a href="https://prowebdevsolutions.com"><picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/branding/PWDS-logo-orange.svg">
+    <img src="assets/branding/PWDS-logo.png" alt="PWDS company logo" width="120">
+  </picture></a>
+</p>
+
+<p align="center"><strong>Draw the shape of a letter, then keep it editable.</strong></p>
 
 FontStrike is a small Windows type-design workspace for outlining glyphs, setting widths and kerning pairs, and exporting a TTF from a UFO source project.
 
@@ -40,3 +47,7 @@ A fresh checkout needs registry access for uncached dependencies; add `--offline
 This is a **Windows engineering preview**, with no verified installer or complete general-purpose font claim. The accepted synthetic fixture compiled to TTF and passed independent table, outline, width, and AV/To kerning checks. External UFO editing, richer point tools, persistent recovery, shaped proof in the app, accessibility, and native pointer acceptance remain open.
 
 No first-party license grant is stated for FontStrike in this checkout. [THIRD_PARTY.md](THIRD_PARTY.md) records identified upstream material and its terms. Explore the other [PWDS Strike repositories](https://github.com/Gerbzz?tab=repositories&q=Strike).
+
+## PWDS brand artwork
+
+The company mark in this masthead is the existing [official PWDS logo](https://github.com/Gerbzz/PWDS-Website/blob/main/public/prowebdevsolutions-logo.png), with the [official orange display asset](https://prowebdevsolutions.com/images/prowebdevsolutions-logo-orange.svg) for dark backgrounds. Any app logo above it remains the original Strike suite artwork.
