@@ -330,6 +330,7 @@ impl eframe::App for FontApp {
             .inner_margin(egui::Margin::symmetric(16.0, 10.0))).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("FONTSTRIKE").size(19.0).strong().color(ACCENT));
+                ui.label(egui::RichText::new("by PWDS").small().color(MUTED));
                 ui.add_space(16.0);
                 if ui.button("New UFO").clicked()
                     && let Some(path) = rfd::FileDialog::new().set_file_name("Untitled.ufo").save_file()
