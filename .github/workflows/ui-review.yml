@@ -1,8 +1,6 @@
 name: FontStrike UI review
 
 on:
-  push:
-    branches: [codex/fontstrike-impeccable-20261017]
   pull_request:
 
 jobs:
@@ -19,16 +17,3 @@ jobs:
         run: cargo test --locked --features desktop
       - name: Build native capture target
         run: cargo build --locked --features desktop --bin fontstrike-desktop
-      - name: Try current renderer capture
-        id: capture
-        continue-on-error: true
-        timeout-minutes: 4
-        shell: pwsh
-        run: .\target\debug\fontstrike-desktop.exe --demo review-fontstrike.ufo --capture review-fontstrike.png
-      - name: Upload current renderer evidence when available
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fontstrike-renderer-review
-          path: review-fontstrike.png
-          if-no-files-found: ignore
