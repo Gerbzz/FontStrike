@@ -327,11 +327,19 @@ impl eframe::App for FontApp {
         }
         self.capture(ctx);
         egui::TopBottomPanel::top("toolbar").frame(egui::Frame::none().fill(PANEL)
-            .inner_margin(egui::Margin::symmetric(16.0, 10.0))).show(ctx, |ui| {
+            .inner_margin(egui::Margin::symmetric(18.0, 10.0))).show(ctx, |ui| {
+            ui.spacing_mut().interact_size.y = 30.0;
             ui.horizontal(|ui| {
                 ui.label(egui::RichText::new("FONTSTRIKE").size(19.0).strong().color(ACCENT));
                 ui.label(egui::RichText::new("by PWDS").small().color(MUTED));
-                ui.add_space(16.0);
+                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                    let title = self.root.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "No font open".into());
+                    let response = ui.label(egui::RichText::new(title).small().color(MUTED));
+                    if let Some(path) = &self.root { response.on_hover_text(path.display().to_string()); }
+                });
+            });
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
                 if ui.button("New UFO").clicked()
                     && let Some(path) = rfd::FileDialog::new().set_file_name("Untitled.ufo").save_file()
                 {
@@ -348,12 +356,13 @@ impl eframe::App for FontApp {
                         Err(e) => self.status = e.to_string(),
                     }
                 }
-                if ui.add_enabled(self.project.is_some(), egui::Button::new("Undo")).clicked() { self.change_history(false); }
-                if ui.add_enabled(self.project.is_some(), egui::Button::new("Redo")).clicked() { self.change_history(true); }
+                ui.separator();
+                let can_undo = self.project.as_ref().is_some_and(FontProject::can_undo);
+                let can_redo = self.project.as_ref().is_some_and(FontProject::can_redo);
+                if ui.add_enabled(can_undo, egui::Button::new("Undo")).clicked() { self.change_history(false); }
+                if ui.add_enabled(can_redo, egui::Button::new("Redo")).clicked() { self.change_history(true); }
+                ui.separator();
                 if ui.add_enabled(self.project.is_some(), egui::Button::new("Export TTF")).clicked() { self.export_ttf(); }
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(egui::RichText::new(self.root.as_ref().map(|p| p.display().to_string()).unwrap_or_else(|| "No font open".into())).small().color(MUTED));
-                });
             });
         });
         egui::SidePanel::left("glyphs").default_width(190.0).resizable(true)
@@ -373,10 +382,11 @@ impl eframe::App for FontApp {
                     ui.label("Create or open a local UFO source.");
                 }
             });
-        egui::SidePanel::right("inspector").default_width(280.0).min_width(245.0).resizable(true)
+        egui::SidePanel::right("inspector").default_width(315.0).min_width(290.0).resizable(true)
             .frame(egui::Frame::none().fill(PANEL).inner_margin(egui::Margin::same(16.0)))
             .show(ctx, |ui| {
-                ui.heading("Outline & metrics");
+                ui.spacing_mut().interact_size.y = 28.0;
+                ui.heading("Glyph inspector");
                 ui.label(egui::RichText::new("1000 units per em · source geometry").small().color(MUTED));
                 ui.separator();
                 if self.project.is_none() {
@@ -384,13 +394,15 @@ impl eframe::App for FontApp {
                     ui.label("Style"); ui.text_edit_singleline(&mut self.style);
                     return;
                 }
+                ui.label(egui::RichText::new("OUTLINE & METRICS").strong().color(ACCENT));
+                ui.add_space(5.0);
                 ui.label("Glyph name"); ui.text_edit_singleline(&mut self.glyph_name);
                 ui.horizontal(|ui| {
                     ui.label("Unicode"); ui.add(egui::TextEdit::singleline(&mut self.unicode).desired_width(42.0));
                     ui.label("Advance"); ui.add(egui::DragValue::new(&mut self.width).range(1.0..=4000.0));
                 });
                 if ui.button("Save outline & width").clicked() { self.save_outline(); }
-                ui.add_space(12.0);
+                ui.add_space(18.0);
                 ui.label(egui::RichText::new("Quick contour").strong().color(ACCENT));
                 ui.label(egui::RichText::new("Creates a closed rectangle in font units; drag its points on the canvas.").small().color(MUTED));
                 egui::Grid::new("rect-fields").num_columns(2).show(ui, |ui| {

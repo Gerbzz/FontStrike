@@ -1,0 +1,34 @@
+name: FontStrike UI review
+
+on:
+  push:
+    branches: [codex/fontstrike-impeccable-20261017]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test font source and desktop code
+        run: cargo test --locked --features desktop
+      - name: Build native capture target
+        run: cargo build --locked --features desktop --bin fontstrike-desktop
+      - name: Try current renderer capture
+        id: capture
+        continue-on-error: true
+        timeout-minutes: 4
+        shell: pwsh
+        run: .\target\debug\fontstrike-desktop.exe --demo review-fontstrike.ufo --capture review-fontstrike.png
+      - name: Upload current renderer evidence when available
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fontstrike-renderer-review
+          path: review-fontstrike.png
+          if-no-files-found: ignore
