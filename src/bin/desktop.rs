@@ -785,6 +785,9 @@ impl App {
                     }
                     ui.separator();
                     ui.add_enabled_ui(has, |ui| {
+                        if !has {
+                            return;
+                        }
                         for (tool, label, tip) in [
                             (Tool::Select, "Select  V", "Select and drag points; double-click a segment to add a point"),
                             (Tool::Pen, "Pen  P", "Click to place points; click the first point or press Esc to close"),
@@ -801,6 +804,9 @@ impl App {
                         }
                     });
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        if !has {
+                            return;
+                        }
                         let busy = self.export_rx.is_some();
                         if ui
                             .add_enabled(has && !busy, primary(if busy { "Exporting…" } else { "Export TTF" }))
@@ -2354,19 +2360,18 @@ impl App {
     fn brand_badge(&self, ui: &mut egui::Ui, width: f32) {
         if let Some(pwds) = &self.pwds {
             let size = vec2(width, width * pwds.size()[1] as f32 / pwds.size()[0] as f32);
-            egui::Frame::none()
-                .fill(Color32::from_rgb(240, 238, 232))
-                .rounding(Rounding::same(5.0))
-                .inner_margin(egui::Margin::symmetric(8.0, 4.0))
-                .show(ui, |ui| {
-                    ui.add(egui::Image::new((pwds.id(), size))).widget_info(|| {
-                        egui::WidgetInfo::labeled(
-                            egui::WidgetType::Label,
-                            true,
-                            "ProWebDevSolutions logo",
-                        )
-                    });
-                });
+            let (rect, response) = ui.allocate_exact_size(size + vec2(16.0, 8.0), Sense::hover());
+            ui.painter()
+                .rect_filled(rect, 5.0, Color32::from_rgb(240, 238, 232));
+            ui.painter().image(
+                pwds.id(),
+                rect.shrink2(vec2(8.0, 4.0)),
+                Rect::from_min_max(pos2(0.0, 0.0), pos2(1.0, 1.0)),
+                Color32::WHITE,
+            );
+            response.widget_info(|| {
+                egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "ProWebDevSolutions logo")
+            });
         }
     }
 
@@ -2780,6 +2785,11 @@ fn main() -> eframe::Result {
     };
     let capture = value("--capture").map(PathBuf::from);
     let select = value("--select");
+    let about = args.iter().any(|a| a == "--about");
+    let point = value("--point").and_then(|s| {
+        let (c, p) = s.split_once(':')?;
+        Some(PointId::new(c.parse().ok()?, p.parse().ok()?))
+    });
     let size = value("--size")
         .and_then(|s| {
             let (w, h) = s.split_once('x')?;
@@ -2823,6 +2833,11 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "FontStrike",
         options,
-        Box::new(move |_cc| Ok(Box::new(App::new(project, capture, select)))),
+        Box::new(move |_cc| {
+            let mut app = App::new(project, capture, select);
+            app.about = about;
+            app.selection.extend(point);
+            Ok(Box::new(app))
+        }),
     )
 }
