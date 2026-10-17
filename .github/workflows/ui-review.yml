@@ -1,0 +1,19 @@
+name: FontStrike UI review
+
+on:
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 50
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test font source and desktop code
+        run: cargo test --locked --features desktop
+      - name: Build native capture target
+        run: cargo build --locked --features desktop --bin fontstrike-desktop
