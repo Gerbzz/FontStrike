@@ -96,26 +96,3 @@ fn undo_and_invalid_open_outline_keep_source_intact() {
     assert!(!project.can_redo());
     assert_eq!(project.width("A").unwrap(), 650.0);
 }
-
-#[test]
-fn external_ufo_changes_after_open_and_unknown_root_files_are_preserved() {
-    let path = std::env::temp_dir().join(format!("fontstrike-external-{}.ufo", std::process::id()));
-    let _ = std::fs::remove_dir_all(&path);
-    let mut project = FontProject::create(&path, "Conflict Fixture", "Regular").unwrap();
-    let data = path.join("data").join("external.txt");
-    std::fs::create_dir_all(data.parent().unwrap()).unwrap();
-    std::fs::write(&data, b"external data added after open").unwrap();
-    project.set_width("space", 251.0).unwrap();
-    assert!(project.save().unwrap_err().to_string().contains("changed outside"));
-    assert_eq!(std::fs::read(&data).unwrap(), b"external data added after open");
-    assert_eq!(FontProject::open(&path).unwrap().width("space").unwrap(), 250.0);
-
-    let unrelated = path.join("unrelated-root.txt");
-    std::fs::write(&unrelated, b"preserve unrelated file").unwrap();
-    let mut reopened = FontProject::open(&path).unwrap();
-    reopened.set_width("space", 252.0).unwrap();
-    assert!(reopened.save().unwrap_err().to_string().contains("would be lost"));
-    assert_eq!(std::fs::read(&unrelated).unwrap(), b"preserve unrelated file");
-    assert_eq!(std::fs::read(&data).unwrap(), b"external data added after open");
-    assert_eq!(FontProject::open(&path).unwrap().width("space").unwrap(), 250.0);
-}

@@ -90,7 +90,9 @@ impl FontApp {
         self.selected_point = None;
     }
     fn parse_unicode(&self) -> Result<Option<char>, String> {
-        if self.unicode.is_empty() { return Ok(None) }
+        if self.unicode.is_empty() {
+            return Ok(None);
+        }
         let mut chars = self.unicode.chars();
         let one = chars.next();
         if chars.next().is_some() {
@@ -136,10 +138,12 @@ impl FontApp {
                 .set_kerning(&self.selected, &self.kern_right, self.kern_amount)
                 .and_then(|()| project.save())
             {
-                Ok(()) => self.status = format!(
-                    "Saved {}{} kerning: {} units",
-                    self.selected, self.kern_right, self.kern_amount
-                ),
+                Ok(()) => {
+                    self.status = format!(
+                        "Saved {}{} kerning: {} units",
+                        self.selected, self.kern_right, self.kern_amount
+                    )
+                }
                 Err(e) => self.status = format!("Kerning: {e}"),
             }
         }
@@ -149,9 +153,18 @@ impl FontApp {
         let Some(path) = rfd::FileDialog::new()
             .add_filter("TrueType font", &["ttf"])
             .set_file_name(format!("{}.ttf", self.family.replace(' ', "")))
-            .save_file() else { return };
+            .save_file()
+        else {
+            return;
+        };
         match project.export_ttf(&path) {
-            Ok(()) => self.status = format!("Compiled and checked {}", path.display()),
+            Ok(report) => {
+                self.status = format!(
+                    "Compiled and checked {}: {}",
+                    path.display(),
+                    report.summary()
+                )
+            }
             Err(e) => self.status = format!("TTF export: {e}"),
         }
     }
@@ -180,7 +193,9 @@ impl FontApp {
         let (canvas, _) = ui.allocate_exact_size(size, Sense::hover());
         let painter = ui.painter_at(canvas);
         painter.rect_filled(canvas, 0.0, BG);
-        let scale = (canvas.width() / 1150.0).min(canvas.height() / 1250.0).max(0.15);
+        let scale = (canvas.width() / 1150.0)
+            .min(canvas.height() / 1250.0)
+            .max(0.15);
         let baseline = canvas.center().y + 180.0 * scale;
         let left = canvas.center().x - 350.0 * scale;
         let to_screen = |p: Point| pos2(left + p.x as f32 * scale, baseline + p.y as f32 * scale);
@@ -244,7 +259,9 @@ impl FontApp {
                     ui.id().with(key),
                     Sense::click_and_drag(),
                 );
-                if response.clicked() { self.selected_point = Some(key); }
+                if response.clicked() {
+                    self.selected_point = Some(key);
+                }
                 if response.drag_started() {
                     self.selected_point = Some(key);
                     self.drag_origin = Some((key, anchor.p));
@@ -255,7 +272,8 @@ impl FontApp {
                 {
                     let delta = response.drag_delta();
                     let anchor = &mut self.outline.subpaths[sub_index].anchors[anchor_index];
-                    let translation = Vec2::new(delta.x as f64 / scale as f64, delta.y as f64 / scale as f64);
+                    let translation =
+                        Vec2::new(delta.x as f64 / scale as f64, delta.y as f64 / scale as f64);
                     let shift = initial + translation - anchor.p;
                     anchor.translate(shift);
                 }
@@ -265,10 +283,22 @@ impl FontApp {
                 }
                 painter.circle_filled(
                     pos,
-                    if self.selected_point == Some(key) { 7.0 } else { 5.0 },
-                    if self.selected_point == Some(key) { TEXT } else { ACCENT },
+                    if self.selected_point == Some(key) {
+                        7.0
+                    } else {
+                        5.0
+                    },
+                    if self.selected_point == Some(key) {
+                        TEXT
+                    } else {
+                        ACCENT
+                    },
                 );
-                response.on_hover_text(format!("Contour {}, point {}", sub_index + 1, anchor_index + 1));
+                response.on_hover_text(format!(
+                    "Contour {}, point {}",
+                    sub_index + 1,
+                    anchor_index + 1
+                ));
             }
         }
         if self.outline.is_empty() {
@@ -283,11 +313,15 @@ impl FontApp {
         commit
     }
     fn capture(&mut self, ctx: &egui::Context) {
-        let Some(path) = self.capture.clone() else { return };
-        let image = ctx.input(|i| i.events.iter().find_map(|event| match event {
-            egui::Event::Screenshot { image, .. } => Some(image.clone()),
-            _ => None,
-        }));
+        let Some(path) = self.capture.clone() else {
+            return;
+        };
+        let image = ctx.input(|i| {
+            i.events.iter().find_map(|event| match event {
+                egui::Event::Screenshot { image, .. } => Some(image.clone()),
+                _ => None,
+            })
+        });
         if let Some(image) = image {
             let pixels: Vec<u8> = image.pixels.iter().flat_map(|p| p.to_array()).collect();
             let result = (|| -> Result<(), String> {
@@ -298,8 +332,10 @@ impl FontApp {
                 let mut png = png::Encoder::new(file, image.size[0] as u32, image.size[1] as u32);
                 png.set_color(png::ColorType::Rgba);
                 png.set_depth(png::BitDepth::Eight);
-                png.write_header().map_err(|e| e.to_string())?
-                    .write_image_data(&pixels).map_err(|e| e.to_string())?;
+                png.write_header()
+                    .map_err(|e| e.to_string())?
+                    .write_image_data(&pixels)
+                    .map_err(|e| e.to_string())?;
                 Ok(())
             })();
             match result {
@@ -326,47 +362,97 @@ impl eframe::App for FontApp {
             ctx.set_visuals(visuals);
         }
         self.capture(ctx);
-        egui::TopBottomPanel::top("toolbar").frame(egui::Frame::none().fill(PANEL)
-            .inner_margin(egui::Margin::symmetric(18.0, 10.0))).show(ctx, |ui| {
-            ui.spacing_mut().interact_size.y = 30.0;
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new("FONTSTRIKE").size(19.0).strong().color(ACCENT));
-                ui.label(egui::RichText::new("by PWDS").small().color(MUTED));
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    let title = self.root.as_ref().and_then(|p| p.file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "No font open".into());
-                    let response = ui.label(egui::RichText::new(title).small().color(MUTED));
-                    if let Some(path) = &self.root { response.on_hover_text(path.display().to_string()); }
+        egui::TopBottomPanel::top("toolbar")
+            .frame(
+                egui::Frame::none()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(18.0, 10.0)),
+            )
+            .show(ctx, |ui| {
+                ui.spacing_mut().interact_size.y = 30.0;
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new("FONTSTRIKE")
+                            .size(19.0)
+                            .strong()
+                            .color(ACCENT),
+                    );
+                    ui.label(egui::RichText::new("by PWDS").small().color(MUTED));
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        let title = self
+                            .root
+                            .as_ref()
+                            .and_then(|p| p.file_name())
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| "No font open".into());
+                        let response = ui.label(egui::RichText::new(title).small().color(MUTED));
+                        if let Some(path) = &self.root {
+                            response.on_hover_text(path.display().to_string());
+                        }
+                    });
+                });
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
+                    if ui.button("New UFO").clicked()
+                        && let Some(path) = rfd::FileDialog::new()
+                            .set_file_name("Untitled.ufo")
+                            .save_file()
+                    {
+                        match FontProject::create(&path, &self.family, &self.style) {
+                            Ok(project) => {
+                                self.project = Some(project);
+                                self.root = Some(path);
+                                self.refresh_glyph_list();
+                                self.status = "New UFO saved".into();
+                            }
+                            Err(e) => self.status = e.to_string(),
+                        }
+                    }
+                    if ui.button("Open UFO").clicked()
+                        && let Some(path) = rfd::FileDialog::new().pick_folder()
+                    {
+                        match FontProject::open(&path) {
+                            Ok(project) => {
+                                self.project = Some(project);
+                                self.root = Some(path);
+                                self.refresh_glyph_list();
+                                self.status = "UFO opened".into();
+                            }
+                            Err(e) => self.status = e.to_string(),
+                        }
+                    }
+                    ui.separator();
+                    let can_undo = self.project.as_ref().is_some_and(FontProject::can_undo);
+                    let can_redo = self.project.as_ref().is_some_and(FontProject::can_redo);
+                    if ui
+                        .add_enabled(can_undo, egui::Button::new("Undo"))
+                        .clicked()
+                    {
+                        self.change_history(false);
+                    }
+                    if ui
+                        .add_enabled(can_redo, egui::Button::new("Redo"))
+                        .clicked()
+                    {
+                        self.change_history(true);
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(self.project.is_some(), egui::Button::new("Export TTF"))
+                        .clicked()
+                    {
+                        self.export_ttf();
+                    }
                 });
             });
-            ui.add_space(6.0);
-            ui.horizontal_wrapped(|ui| {
-                if ui.button("New UFO").clicked()
-                    && let Some(path) = rfd::FileDialog::new().set_file_name("Untitled.ufo").save_file()
-                {
-                    match FontProject::create(&path, &self.family, &self.style) {
-                        Ok(project) => { self.project = Some(project); self.root = Some(path); self.refresh_glyph_list(); self.status = "New UFO saved".into(); }
-                        Err(e) => self.status = e.to_string(),
-                    }
-                }
-                if ui.button("Open UFO").clicked()
-                    && let Some(path) = rfd::FileDialog::new().pick_folder()
-                {
-                    match FontProject::open(&path) {
-                        Ok(project) => { self.project = Some(project); self.root = Some(path); self.refresh_glyph_list(); self.status = "UFO opened".into(); }
-                        Err(e) => self.status = e.to_string(),
-                    }
-                }
-                ui.separator();
-                let can_undo = self.project.as_ref().is_some_and(FontProject::can_undo);
-                let can_redo = self.project.as_ref().is_some_and(FontProject::can_redo);
-                if ui.add_enabled(can_undo, egui::Button::new("Undo")).clicked() { self.change_history(false); }
-                if ui.add_enabled(can_redo, egui::Button::new("Redo")).clicked() { self.change_history(true); }
-                ui.separator();
-                if ui.add_enabled(self.project.is_some(), egui::Button::new("Export TTF")).clicked() { self.export_ttf(); }
-            });
-        });
-        egui::SidePanel::left("glyphs").default_width(190.0).resizable(true)
-            .frame(egui::Frame::none().fill(PANEL).inner_margin(egui::Margin::same(14.0)))
+        egui::SidePanel::left("glyphs")
+            .default_width(190.0)
+            .resizable(true)
+            .frame(
+                egui::Frame::none()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::same(14.0)),
+            )
             .show(ctx, |ui| {
                 ui.heading("Glyphs");
                 ui.label(egui::RichText::new(&self.family).color(MUTED));
@@ -375,7 +461,9 @@ impl eframe::App for FontApp {
                     let names = project.glyph_names();
                     egui::ScrollArea::vertical().show(ui, |ui| {
                         for name in names {
-                            if ui.selectable_label(self.selected == name, &name).clicked() { self.select(&name); }
+                            if ui.selectable_label(self.selected == name, &name).clicked() {
+                                self.select(&name);
+                            }
                         }
                     });
                 } else {
@@ -438,19 +526,35 @@ impl eframe::App for FontApp {
                 if ui.button("Save pair").clicked() { self.set_kerning(); }
                 ui.label(egui::RichText::new("TTF export compiles this UFO and checks tables, mappings, and widths. Shaped proof is pending.").small().color(MUTED));
             });
-        egui::TopBottomPanel::bottom("status").frame(egui::Frame::none().fill(PANEL)
-            .inner_margin(egui::Margin::symmetric(14.0, 7.0))).show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                ui.label(&self.status);
-                ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
-                    ui.label(egui::RichText::new("EDITABLE UFO SOURCE").small().color(ACCENT));
+        egui::TopBottomPanel::bottom("status")
+            .frame(
+                egui::Frame::none()
+                    .fill(PANEL)
+                    .inner_margin(egui::Margin::symmetric(14.0, 7.0)),
+            )
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(&self.status);
+                    ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
+                        ui.label(
+                            egui::RichText::new("EDITABLE UFO SOURCE")
+                                .small()
+                                .color(ACCENT),
+                        );
+                    });
                 });
             });
-        });
-        egui::CentralPanel::default().frame(egui::Frame::none().fill(BG)
-            .inner_margin(egui::Margin::same(8.0))).show(ctx, |ui| {
-            if self.draw_canvas(ui) { self.save_outline(); }
-        });
+        egui::CentralPanel::default()
+            .frame(
+                egui::Frame::none()
+                    .fill(BG)
+                    .inner_margin(egui::Margin::same(8.0)),
+            )
+            .show(ctx, |ui| {
+                if self.draw_canvas(ui) {
+                    self.save_outline();
+                }
+            });
         if ctx.input(|i| i.modifiers.command && i.key_pressed(egui::Key::S)) {
             self.save_outline();
         }
@@ -461,33 +565,96 @@ impl eframe::App for FontApp {
 }
 
 fn make_demo(root: &Path) -> Result<FontProject, String> {
-    if root.exists() { return FontProject::open(root).map_err(|e| e.to_string()); }
-    let mut project = FontProject::create(root, "Strike Sans", "Regular").map_err(|e| e.to_string())?;
-    for (name, width, points) in [
-        ("A", 620.0, vec![(55.0,0.0),(260.0,700.0),(350.0,700.0),(565.0,0.0),(445.0,0.0),(310.0,490.0),(175.0,0.0)]),
-        ("V", 620.0, vec![(55.0,700.0),(182.0,700.0),(310.0,170.0),(438.0,700.0),(565.0,700.0),(370.0,0.0),(250.0,0.0)]),
-    ] {
-        let path = PathData::single(SubPath::new(points.into_iter().map(|(x,y)| Anchor::corner(Point::new(x,-y))).collect(), true));
-        project.set_outline(name, name.chars().next(), width, &path).map_err(|e| e.to_string())?;
+    if root.exists() {
+        return FontProject::open(root).map_err(|e| e.to_string());
     }
-    project.set_kerning("A", "V", -80.0).map_err(|e| e.to_string())?;
+    let mut project =
+        FontProject::create(root, "Strike Sans", "Regular").map_err(|e| e.to_string())?;
+    for (name, width, points) in [
+        (
+            "A",
+            620.0,
+            vec![
+                (55.0, 0.0),
+                (260.0, 700.0),
+                (350.0, 700.0),
+                (565.0, 0.0),
+                (445.0, 0.0),
+                (310.0, 490.0),
+                (175.0, 0.0),
+            ],
+        ),
+        (
+            "V",
+            620.0,
+            vec![
+                (55.0, 700.0),
+                (182.0, 700.0),
+                (310.0, 170.0),
+                (438.0, 700.0),
+                (565.0, 700.0),
+                (370.0, 0.0),
+                (250.0, 0.0),
+            ],
+        ),
+    ] {
+        let path = PathData::single(SubPath::new(
+            points
+                .into_iter()
+                .map(|(x, y)| Anchor::corner(Point::new(x, -y)))
+                .collect(),
+            true,
+        ));
+        project
+            .set_outline(name, name.chars().next(), width, &path)
+            .map_err(|e| e.to_string())?;
+    }
+    project
+        .set_kerning("A", "V", -80.0)
+        .map_err(|e| e.to_string())?;
     project.save().map_err(|e| e.to_string())?;
     Ok(project)
 }
 
 fn main() -> eframe::Result {
     let args: Vec<String> = std::env::args().collect();
-    let demo = args.iter().position(|a| a == "--demo").and_then(|i| args.get(i + 1));
-    let open = args.iter().position(|a| a == "--project").and_then(|i| args.get(i + 1));
-    let capture = args.iter().position(|a| a == "--capture").and_then(|i| args.get(i + 1)).map(PathBuf::from);
+    let demo = args
+        .iter()
+        .position(|a| a == "--demo")
+        .and_then(|i| args.get(i + 1));
+    let open = args
+        .iter()
+        .position(|a| a == "--project")
+        .and_then(|i| args.get(i + 1));
+    let capture = args
+        .iter()
+        .position(|a| a == "--capture")
+        .and_then(|i| args.get(i + 1))
+        .map(PathBuf::from);
     let root = demo.or(open).map(PathBuf::from);
     let project = root.as_ref().and_then(|path| {
-        let result = if demo.is_some() { make_demo(path) } else { FontProject::open(path).map_err(|e| e.to_string()) };
-        match result { Ok(project) => Some(project), Err(e) => { eprintln!("Open font: {e}"); None } }
+        let result = if demo.is_some() {
+            make_demo(path)
+        } else {
+            FontProject::open(path).map_err(|e| e.to_string())
+        };
+        match result {
+            Ok(project) => Some(project),
+            Err(e) => {
+                eprintln!("Open font: {e}");
+                None
+            }
+        }
     });
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([1320.0, 790.0]).with_min_inner_size([980.0, 650.0]),
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1320.0, 790.0])
+            .with_min_inner_size([980.0, 650.0]),
         ..Default::default()
     };
-    eframe::run_native("FontStrike", options, Box::new(move |_cc| Ok(Box::new(FontApp::new(project, root, capture)))))
+    eframe::run_native(
+        "FontStrike",
+        options,
+        Box::new(move |_cc| Ok(Box::new(FontApp::new(project, root, capture)))),
+    )
 }
