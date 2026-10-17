@@ -113,5 +113,6 @@ pub fn build(root: &Path) -> Result<FontProject> {
     p.set_kerning("T", "o", -60.0)?;
     p.set_kerning("V", "A", -70.0)?;
     p.save()?;
+    p.clear_history();
     Ok(p)
 }

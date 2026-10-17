@@ -1384,3 +1384,13 @@ impl std::fmt::Debug for FontProject {
             .finish()
     }
 }
+
+impl FontProject {
+    /// Forgets undo/redo history (used after programmatic construction,
+    /// e.g. the synthetic test font, so the user starts with a clean slate).
+    pub fn clear_history(&mut self) {
+        self.end_gesture();
+        self.undo.clear();
+        self.redo.clear();
+    }
+}
