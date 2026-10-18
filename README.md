@@ -24,7 +24,7 @@
 ![FontStrike editing the synthetic test font: glyph grid, the A outline with its counter, metric guides, inspector with metrics and kerning, and a kerned text preview](docs/screenshots/editor-A.png)
 
 *The running app editing **FontStrike Test Sans (Synthetic)**, a test font drawn from
-coordinates in [`src/demo.rs`](src/demo.rs). Captured from the real window with the app's
+coordinates in [`src/demo.rs`](src/demo.rs), in the default dark theme. Captured from the real window with the app's
 `--capture` flag; see [Screenshots](#screenshots).*
 
 ## What works
@@ -83,6 +83,11 @@ coordinates in [`src/demo.rs`](src/demo.rs). Captured from the real window with 
   name shows its unsaved state. PWDS branding appears only on the start card and in About.
 - Unsaved-change prompts on New, Open, and Quit. Keyboard shortcuts (Help → Keyboard
   shortcuts). Resizable panels that narrow on small windows (minimum 900 × 600).
+- **Dark (default), Light, or System theme** under View → Theme. The choice applies at once
+  and is remembered in `%APPDATA%\FontStrike\settings.ini`. Dark is the original look; Light
+  keeps the orange accent, darkened so text, buttons, focus rings, and status colours meet
+  WCAG AA (checked by unit tests), with its own canvas, outline, point, and preview colours.
+  System follows Windows and falls back to Dark if the OS theme is unknown.
 - AccessKit is enabled, so controls are exposed to Windows screen readers; form fields are
   labelled and the glyph grid, canvas, and preview describe themselves.
 
@@ -137,7 +142,7 @@ but there is no installer and it has not been used on a large production font.
 | Sources | UFO 2/3, lossless round trip, recovery, autosave | Designspace / multiple masters, `.ufoz` |
 | Export | Static TTF via fontc with independent checks | OTF/CFF, WOFF2, variable fonts, hinting |
 | Validation | ttf-parser, rustybuzz, fontkit, opentype.js | fontTools ttx round trip and OTS (no Python on the build machine) |
-| UI | Responsive panels, shortcuts, AccessKit | Narrator walkthrough, high-contrast theme, localisation |
+| UI | Responsive panels, shortcuts, AccessKit, Dark/Light/System themes | Narrator walkthrough, Windows high-contrast mode, localisation |
 
 Known limits:
 - Only the default layer is edited.
@@ -146,19 +151,26 @@ Known limits:
 - Export compiles in the background; saving runs on the UI thread.
 - Pointer interaction with the built window was **not** exercised by an automated agent for
   this release (desktop control was declined). Editing behaviour is covered by the library
-  tests, and the screenshots are real rendered frames, not interaction recordings.
+  tests, and the screenshots are real rendered frames, not interaction recordings. Theme
+  switching through View → Theme was likewise not clicked through; the light captures use
+  the `--theme light` flag, and persistence and resolution are covered by tests.
 
 ## Screenshots
 
 All images are frames rendered by the running app (`fontstrike-desktop --capture FILE.png`
-saves the window's own framebuffer) using the synthetic test font. No mockups.
+saves the window's own framebuffer) using the synthetic test font. No mockups. Dark is the
+default theme; light captures use `--theme light`.
 
-| | |
+| Dark (default) | Light |
 | --- | --- |
-| ![Start card with logo, New font, Open, and synthetic test font buttons](docs/screenshots/splash.png) | ![The o glyph with one smooth point selected and its X/Y fields, smooth toggle, and contour actions in the inspector](docs/screenshots/editor-o-point-selected.png) |
-| *Start card (with About, the only place PWDS branding appears).* | *Editing the o: smooth point selected, handles, counter, kerned preview.* |
-| ![About dialog with credits](docs/screenshots/about.png) | ![The V glyph in a 1000 by 680 window](docs/screenshots/editor-narrow-1000x680.png) |
-| *About FontStrike and credits.* | *A 1000 × 680 window: panels shrink, nothing overlaps.* |
+| ![Dark theme: the o glyph with one smooth point selected and its X/Y fields, smooth toggle, and contour actions in the inspector](docs/screenshots/editor-o-point-selected.png) | ![Light theme: the same o glyph and selected point on a white canvas with dark orange outline](docs/screenshots/light-editor-o-point-selected.png) |
+| *Dark: editing the o, smooth point selected, kerned preview.* | *Light: the same view.* |
+| ![Dark theme: About dialog with credits](docs/screenshots/about.png) | ![Light theme: About dialog with credits](docs/screenshots/light-about.png) |
+| *Dark: About FontStrike and credits.* | *Light: About.* |
+| ![Dark theme: start card with logo, New font, Open, and synthetic test font buttons](docs/screenshots/splash.png) | ![Light theme: start card](docs/screenshots/light-splash.png) |
+| *Dark: start card (with About, the only place PWDS branding appears).* | *Light: start card.* |
+| ![Light theme: the A glyph editor](docs/screenshots/light-editor-A.png) | ![Dark theme: the V glyph in a 1000 by 680 window](docs/screenshots/editor-narrow-1000x680.png) |
+| *Light: the A, as in the top screenshot.* | *Dark: a 1000 × 680 window; panels shrink, nothing overlaps.* |
 
 ## Credits and licences
 
