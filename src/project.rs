@@ -238,6 +238,7 @@ impl FontProject {
                 "{problem}. Choose Recover to finish or roll it back before opening."
             )));
         }
+        storage::refuse_symlink_root(root)?;
         if !root.is_dir() {
             return Err(Error::new(format!(
                 "{} is not a UFO folder",
@@ -1328,7 +1329,14 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
     for entry in std::fs::read_dir(from).map_err(|e| Error::new(e.to_string()))? {
         let entry = entry.map_err(|e| Error::new(e.to_string()))?;
         let target = to.join(entry.file_name());
-        if entry.path().is_dir() {
+        // file_type() does not follow links, so a link is never copied through.
+        let kind = entry.file_type().map_err(|e| Error::new(e.to_string()))?;
+        if kind.is_symlink() {
+            return Err(Error::new(format!(
+                "UFO contains a symlink, which FontStrike does not follow: {}",
+                entry.path().display()
+            )));
+        } else if kind.is_dir() {
             copy_tree(&entry.path(), &target)?;
         } else {
             std::fs::copy(entry.path(), &target).map_err(|e| Error::new(e.to_string()))?;

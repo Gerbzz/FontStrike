@@ -109,9 +109,32 @@ fn io_err(context: &str, e: impl std::fmt::Display) -> Error {
     Error::new(format!("{context}: {e}"))
 }
 
+/// A UFO-relative path as the UFO spec writes it (`/` separators on every
+/// OS), for notes and messages.
+pub(crate) fn ufo_rel(path: &Path) -> String {
+    path.components()
+        .map(|c| c.as_os_str().to_string_lossy())
+        .collect::<Vec<_>>()
+        .join("/")
+}
+
+/// Refuses a UFO folder that is itself a symlink (or, on Windows, a
+/// junction). Saving swaps the folder by renaming it, which would replace the
+/// link with a real folder and leave the link target behind.
+pub(crate) fn refuse_symlink_root(root: &Path) -> Result<()> {
+    match fs::symlink_metadata(root) {
+        Ok(m) if m.file_type().is_symlink() => Err(Error::new(format!(
+            "{} is a symlink; FontStrike does not follow links. Open the real UFO folder instead.",
+            root.display()
+        ))),
+        _ => Ok(()),
+    }
+}
+
 /// SHA-256 of every file plus every directory entry under `root`.
 pub(crate) fn snapshot_tree(root: &Path) -> Result<Snapshot> {
     let mut snapshot = BTreeMap::new();
+    refuse_symlink_root(root)?;
     if !root.exists() {
         return Ok(snapshot);
     }
@@ -133,7 +156,7 @@ pub(crate) fn snapshot_tree(root: &Path) -> Result<Snapshot> {
             if kind.is_symlink() {
                 return Err(Error::new(format!(
                     "UFO contains a symlink, which FontStrike does not follow: {}",
-                    relative.display()
+                    ufo_rel(&relative)
                 )));
             }
             if kind.is_dir() {
@@ -147,7 +170,7 @@ pub(crate) fn snapshot_tree(root: &Path) -> Result<Snapshot> {
             } else {
                 return Err(Error::new(format!(
                     "unsupported file type in UFO: {}",
-                    relative.display()
+                    ufo_rel(&relative)
                 )));
             }
         }
@@ -231,7 +254,7 @@ pub(crate) fn analyse(
                     .contains_key(&PathBuf::from(p.components().next().unwrap().as_os_str()))
         })
         .filter(|p| p.as_path() != Path::new(".fontstrike-v1"))
-        .map(|p| p.display().to_string())
+        .map(|p| ufo_rel(p))
         .collect();
     if !top_unknown.is_empty() {
         notes.push(format!(
@@ -306,14 +329,41 @@ pub(crate) fn write_model(font: &Font, dest: &Path) -> Result<()> {
     font.save(dest).map_err(|e| io_err("write UFO", e))
 }
 
+/// Flushes a directory's entries (new names, renames) to disk.
+///
+/// On Unix a rename or a newly created file is only durable once its parent
+/// directory is fsynced. Windows (NTFS) journals directory metadata itself
+/// and cannot open a directory as a plain file, so this is a no-op there.
+pub(crate) fn sync_dir(dir: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        fs::File::open(dir)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = dir;
+        Ok(())
+    }
+}
+
+/// Fsyncs the parent of `path` (the folder that holds a renamed entry).
+fn sync_parent(path: &Path) -> io::Result<()> {
+    match path.parent() {
+        Some(p) if !p.as_os_str().is_empty() => sync_dir(p),
+        _ => sync_dir(Path::new(".")),
+    }
+}
+
 fn sync_tree(root: &Path) -> Result<()> {
     let mut pending = vec![root.to_path_buf()];
     while let Some(dir) = pending.pop() {
         for entry in fs::read_dir(&dir).map_err(|e| io_err("flush stage", e))? {
-            let path = entry.map_err(|e| io_err("flush stage", e))?.path();
-            if path.is_dir() {
+            let entry = entry.map_err(|e| io_err("flush stage", e))?;
+            let path = entry.path();
+            let kind = entry.file_type().map_err(|e| io_err("flush stage", e))?;
+            if kind.is_dir() {
                 pending.push(path);
-            } else {
+            } else if kind.is_file() {
                 fs::OpenOptions::new()
                     .write(true)
                     .open(&path)
@@ -321,20 +371,39 @@ fn sync_tree(root: &Path) -> Result<()> {
                     .map_err(|e| io_err("flush stage", e))?;
             }
         }
+        sync_dir(&dir).map_err(|e| io_err("flush stage folder", e))?;
     }
     Ok(())
 }
 
-/// Renames with short retries: on Windows, indexers and antivirus scanners
-/// briefly hold handles inside freshly written folders.
+/// Renames a folder whose destination must not exist, then makes the rename
+/// durable.
+///
+/// The semantics are made identical on every OS: Unix `rename(2)` silently
+/// replaces an existing *empty* directory while Windows `MoveFileExW` refuses,
+/// so an existing destination is always an error here.
+///
+/// On Windows, indexers and antivirus scanners briefly hold handles inside
+/// freshly written folders, so sharing violations are retried for a moment.
+/// On Unix a permission error is permanent and is reported immediately.
 fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
+    if fs::symlink_metadata(to).is_ok() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            format!("{} already exists", to.display()),
+        ));
+    }
     let mut last = None;
     for attempt in 0..20 {
         match fs::rename(from, to) {
-            Ok(()) => return Ok(()),
-            Err(e)
-                if e.kind() == io::ErrorKind::PermissionDenied || e.raw_os_error() == Some(32) =>
-            {
+            Ok(()) => {
+                sync_parent(to)?;
+                if from.parent() != to.parent() {
+                    sync_parent(from)?;
+                }
+                return Ok(());
+            }
+            Err(e) if cfg!(windows) && is_transient_windows_error(&e) => {
                 last = Some(e);
                 std::thread::sleep(std::time::Duration::from_millis(25 * (attempt + 1)));
             }
@@ -342,6 +411,14 @@ fn rename_retry(from: &Path, to: &Path) -> io::Result<()> {
         }
     }
     Err(last.unwrap_or_else(|| io::Error::other("rename failed")))
+}
+
+/// ERROR_ACCESS_DENIED (5) and ERROR_SHARING_VIOLATION (32) are what Windows
+/// reports while another process briefly holds a handle. The raw codes are
+/// only meaningful on Windows (32 is EPIPE on Unix), hence the `cfg!` guard
+/// at the call site.
+fn is_transient_windows_error(e: &io::Error) -> bool {
+    e.kind() == io::ErrorKind::PermissionDenied || matches!(e.raw_os_error(), Some(5 | 32))
 }
 
 fn compare_models(expected: &Font, actual: &Font) -> Result<()> {
@@ -432,14 +509,14 @@ pub(crate) fn save(
                 if to.exists() {
                     return Err(Error::new(format!(
                         "staged model file conflicts with preserved {}; source preserved",
-                        rel.display()
+                        ufo_rel(rel)
                     )));
                 }
                 if let Some(parent) = to.parent() {
                     fs::create_dir_all(parent).map_err(|e| io_err("preserve folder", e))?;
                 }
                 fs::copy(&from, &to)
-                    .map_err(|e| io_err(&format!("preserve {}", rel.display()), e))?;
+                    .map_err(|e| io_err(&format!("preserve {}", ufo_rel(rel)), e))?;
             }
         }
         merge_extra(
@@ -464,7 +541,7 @@ pub(crate) fn save(
         {
             return Err(Error::new(format!(
                 "saving would drop {}; source preserved",
-                missing.display()
+                ufo_rel(missing)
             )));
         }
         sync_tree(&stage)?;
@@ -487,6 +564,7 @@ pub(crate) fn save(
         let mut f = fs::File::create(&journal).map_err(|e| io_err("write save journal", e))?;
         f.write_all(b"FontStrike commit journal v1\nstaging complete\n")
             .and_then(|()| f.sync_all())
+            .and_then(|()| sync_parent(&journal))
             .map_err(|e| io_err("write save journal", e))?;
     }
     if stop == Some(SaveInterruption::AfterJournal) {
@@ -519,6 +597,7 @@ pub(crate) fn save(
         fs::remove_dir_all(&backup).map_err(|e| io_err("remove previous version", e))?;
     }
     let _ = fs::remove_file(&journal);
+    let _ = sync_parent(&journal);
     let snapshot = snapshot_tree(root)?;
     let (preserved, _) = analyse(root, font, &snapshot)?;
     Ok(DiskState {
