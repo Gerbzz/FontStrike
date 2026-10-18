@@ -22,6 +22,15 @@ not dependencies of FontStrike and nothing from them ships with it.
 was outside what this work was authorised to change. They remain the
 recommended next validators; the commands are listed below.
 
+**Still not run (2026-10-18):** a CI step that installs `fonttools` and
+`opentype-sanitizer` with pip on the Linux runner, round-trips both test fonts
+through `ttx`, runs `ots-sanitize`, and runs
+[`tools/validate_fonttools.py`](../tools/validate_fonttools.py) (TTFont table
+decompile, TTX round trip, GPOS kerning check) is written but has **not run yet**:
+the workflow file could not be pushed because the GitHub token lacks the
+`workflow` scope. No fontTools or OTS output exists yet; this page will record
+the real output and link the run once it runs.
+
 ## Fonts checked
 
 1. `FontStrikeTestSans.ttf`, the synthetic test font

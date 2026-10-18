@@ -134,6 +134,61 @@ cargo run --locked --features desktop --bin fontstrike-desktop -- --project Test
 The CLI also has `new`, `rect`, `width`, `kern`, `status`, and `recover`. See
 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) for the architecture, test map, and capture flags.
 
+## Platforms
+
+Only a platform that CI builds **and** tests counts as supported. Status as of
+2026-10-18:
+
+| Platform | Status | Evidence |
+| --- | --- | --- |
+| Windows (x86-64) | **Supported.** `cargo test --locked --features desktop` (all suites, including `tests/portability.rs`) and a desktop build pass in CI on `windows-latest`. | [CI run 39163416721](https://github.com/Gerbzz/FontStrike/actions/runs/39163416721) (commit 027483e). Also built, tested, and captured by hand on Windows 11. |
+| Linux (x86-64) | **Not yet built or tested anywhere.** The code paths are portable and the CI job is written, but it has not run. | Waiting on the three-OS workflow (needs the GitHub `workflow` token scope to push). |
+| macOS | **Not yet built or tested anywhere.** Same as Linux. | Same as Linux. |
+
+The three-OS workflow runs fmt, clippy (`-D warnings`), the tests, and a release build on
+`windows-latest`, `ubuntu-latest`, and `macos-latest`. It also captures the app (under
+`xvfb-run` on Linux) and validates the exported fonts with fontTools and OpenType Sanitizer.
+This table will be updated with its run links once it runs.
+
+### Prerequisites
+
+- **All platforms:** a Rust toolchain with edition 2024 support (stable from rustup).
+- **Windows:** the MSVC build tools (Visual Studio Build Tools, "Desktop development with
+  C++").
+- **macOS:** the Xcode Command Line Tools (`xcode-select --install`).
+- **Linux (Debian/Ubuntu package names):** the eframe (winit, glutin, X11/Wayland) and rfd
+  dependencies, plus an OpenGL driver:
+
+  ```sh
+  sudo apt-get install libxkbcommon-dev libxkbcommon-x11-0 libxcb-render0-dev \n    libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev libgl1 libegl1 libgl1-mesa-dri
+  ```
+
+  File dialogs go through the XDG desktop portal (`xdg-desktop-portal` plus a backend such
+  as `-gtk` or `-gnome`), which desktop installs normally include. For headless capture,
+  add `xvfb` and run the app under `xvfb-run`.
+
+### Where settings live
+
+| OS | File |
+| --- | --- |
+| Windows | `%APPDATA%\FontStrike\settings.ini` (same as earlier builds; read in place) |
+| macOS | `~/Library/Application Support/FontStrike/settings.ini` |
+| Linux/BSD | `$XDG_CONFIG_HOME/FontStrike/settings.ini`, else `~/.config/FontStrike/settings.ini` |
+
+If an earlier build kept settings somewhere else (on macOS, `~/.config/FontStrike`), they
+are copied over on first start; the old file is left in place.
+
+### Platform notes
+
+- Shortcuts use Cmd on macOS and Ctrl elsewhere. Cmd/Ctrl+Q quits, asking first if there
+  are unsaved edits.
+- On macOS, winit's default app menu is turned off, because its Quit would exit without
+  that question. The menus are the ones inside the window, so there is no native app menu
+  (Hide, Services).
+- Saves swap folders by rename on every OS. On Linux and macOS the folders are also fsynced
+  so a finished save survives power loss. UFOs that are symlinks, or that contain them, are
+  refused.
+
 ## Status and limits
 
 FontStrike is an **engineering preview**: the workflow above is implemented and tested,
@@ -145,7 +200,7 @@ but there is no installer and it has not been used on a large production font.
 | Spacing | Width, side bearings, glyph and group kerning | Kerning group editing, kerning class view, metrics keys |
 | Sources | UFO 2/3, lossless round trip, recovery, autosave | Designspace / multiple masters, `.ufoz` |
 | Export | Static TTF via fontc with independent checks | OTF/CFF, WOFF2, variable fonts, hinting |
-| Validation | ttf-parser, rustybuzz, fontkit, opentype.js | fontTools ttx round trip and OTS (no Python on the build machine) |
+| Validation | ttf-parser, rustybuzz, fontkit, opentype.js | fontTools ttx round trip and OTS (CI step written, not yet run; see docs/VALIDATION.md) |
 | UI | Responsive panels, shortcuts, AccessKit, Dark/Light/System themes | Narrator walkthrough, Windows high-contrast mode, localisation |
 
 Known limits:
