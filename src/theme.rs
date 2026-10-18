@@ -4,6 +4,7 @@
 //! Dark is FontStrike's original look and the default. Light keeps the same
 //! orange accent family, darkened until text and controls meet WCAG AA.
 
+use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -264,23 +265,169 @@ impl Settings {
             text.push_str(line);
             text.push('\n');
         }
-        let tmp = path.with_extension("tmp");
-        {
-            let mut f = fs::File::create(&tmp)?;
-            f.write_all(text.as_bytes())?;
-            f.sync_all()?;
-        }
-        fs::rename(&tmp, path)
+        write_atomic(path, text.as_bytes())
     }
 
-    /// `%APPDATA%\FontStrike\settings.ini` on Windows, the XDG config
-    /// directory elsewhere.
+    /// The settings file for this OS (see [`config_path_for`]).
     pub fn default_path() -> Option<PathBuf> {
-        let base = std::env::var_os("APPDATA")
-            .map(PathBuf::from)
-            .or_else(|| std::env::var_os("XDG_CONFIG_HOME").map(PathBuf::from))
-            .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))?;
-        Some(base.join("FontStrike").join("settings.ini"))
+        config_path_for(Os::current(), &|k| std::env::var_os(k))
+    }
+
+    /// Copies settings from a location an earlier FontStrike build used into
+    /// `path` when `path` does not exist yet. The old file is never deleted
+    /// or changed. Returns the file that was copied, if any.
+    pub fn migrate(path: &Path, legacy: &[PathBuf]) -> std::io::Result<Option<PathBuf>> {
+        if path.exists() {
+            return Ok(None);
+        }
+        for old in legacy {
+            if old != path && old.is_file() {
+                let bytes = fs::read(old)?;
+                if let Some(dir) = path.parent()
+                    && !dir.as_os_str().is_empty()
+                {
+                    fs::create_dir_all(dir)?;
+                }
+                write_atomic(path, &bytes)?;
+                return Ok(Some(old.clone()));
+            }
+        }
+        Ok(None)
+    }
+
+    /// [`Settings::migrate`] for this OS's default and legacy locations.
+    pub fn migrate_default() -> std::io::Result<Option<PathBuf>> {
+        let env = |k: &str| std::env::var_os(k);
+        match config_path_for(Os::current(), &env) {
+            Some(path) => Settings::migrate(&path, &legacy_paths_for(Os::current(), &env)),
+            None => Ok(None),
+        }
+    }
+}
+
+/// Temporary file, fsync, rename over the destination, fsync the folder.
+/// `std::fs::rename` replaces an existing file on Windows and Unix alike.
+fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+    let tmp = path.with_extension("tmp");
+    {
+        let mut f = fs::File::create(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+    }
+    fs::rename(&tmp, path)?;
+    match path.parent() {
+        Some(dir) if !dir.as_os_str().is_empty() => crate::storage::sync_dir(dir),
+        _ => Ok(()),
+    }
+}
+
+/// Operating-system families that differ in where settings live.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Os {
+    Windows,
+    MacOs,
+    /// Linux and the BSDs (XDG Base Directory specification).
+    Unix,
+}
+
+impl Os {
+    pub fn current() -> Os {
+        if cfg!(windows) {
+            Os::Windows
+        } else if cfg!(target_os = "macos") {
+            Os::MacOs
+        } else {
+            Os::Unix
+        }
+    }
+}
+
+type Env<'a> = &'a dyn Fn(&str) -> Option<OsString>;
+
+fn non_empty(env: Env, key: &str) -> Option<PathBuf> {
+    env(key).filter(|v| !v.is_empty()).map(PathBuf::from)
+}
+
+/// Where FontStrike keeps `settings.ini`, following each platform's
+/// convention:
+///
+/// * Windows: `%APPDATA%\FontStrike\settings.ini` (Roaming AppData);
+/// * macOS: `~/Library/Application Support/FontStrike/settings.ini`;
+/// * Linux/BSD: `$XDG_CONFIG_HOME/FontStrike/settings.ini`, defaulting to
+///   `~/.config` when the variable is unset, empty, or relative (as the XDG
+///   spec requires).
+///
+/// `env` looks up environment variables, so every OS can be tested anywhere.
+pub fn config_path_for(os: Os, env: Env) -> Option<PathBuf> {
+    let base = match os {
+        Os::Windows => non_empty(env, "APPDATA")
+            .or_else(|| non_empty(env, "USERPROFILE").map(|h| h.join("AppData").join("Roaming")))?,
+        Os::MacOs => non_empty(env, "HOME")?
+            .join("Library")
+            .join("Application Support"),
+        Os::Unix => non_empty(env, "XDG_CONFIG_HOME")
+            .filter(|p| p.has_root())
+            .or_else(|| non_empty(env, "HOME").map(|h| h.join(".config")))?,
+    };
+    Some(base.join("FontStrike").join("settings.ini"))
+}
+
+/// Settings locations used by earlier builds that are not the current
+/// location on `os`. Earlier builds checked `APPDATA`, then
+/// `XDG_CONFIG_HOME`, then `~/.config` on every OS. On Windows that is the
+/// current location, so Windows settings are read in place and nothing
+/// moves; on macOS the old file was under `~/.config`.
+pub fn legacy_paths_for(os: Os, env: Env) -> Vec<PathBuf> {
+    let old = non_empty(env, "APPDATA")
+        .or_else(|| non_empty(env, "XDG_CONFIG_HOME"))
+        .or_else(|| non_empty(env, "HOME").map(|h| h.join(".config")))
+        .map(|b| b.join("FontStrike").join("settings.ini"));
+    let current = config_path_for(os, env);
+    old.into_iter()
+        .filter(|p| Some(p) != current.as_ref())
+        .collect()
+}
+
+/// Reads the desktop colour-scheme preference from the output of
+/// `gsettings get org.gnome.desktop.interface color-scheme` (GNOME 42+, also
+/// honoured by other GTK desktops). Used on Linux, where the windowing layer
+/// often cannot report the system theme.
+pub fn parse_gnome_color_scheme(output: &str) -> Option<Mode> {
+    match output.trim().trim_matches('\'') {
+        "prefer-dark" => Some(Mode::Dark),
+        "prefer-light" => Some(Mode::Light),
+        _ => None,
+    }
+}
+
+/// A shortcut hint written with `Ctrl+` as shown on `os`: macOS users press
+/// Command for these shortcuts (egui's `Modifiers::COMMAND`), so `Ctrl+`
+/// becomes `Cmd+` there.
+pub fn shortcut_label(text: &str, os: Os) -> String {
+    match os {
+        Os::MacOs => text.replace("Ctrl+", "Cmd+"),
+        Os::Windows | Os::Unix => text.to_string(),
+    }
+}
+
+/// The View → Theme label for the System choice.
+pub fn system_theme_label(os: Os) -> &'static str {
+    match os {
+        Os::Windows => "System (follow Windows)",
+        Os::MacOs => "System (follow macOS)",
+        Os::Unix => "System (follow desktop)",
+    }
+}
+
+/// Reads a `GTK_THEME` value such as `Adwaita:dark`.
+pub fn parse_gtk_theme(value: &str) -> Option<Mode> {
+    let v = value.trim().to_ascii_lowercase();
+    if v.is_empty() {
+        None
+    } else if v.ends_with(":dark") || v.ends_with("-dark") {
+        Some(Mode::Dark)
+    } else {
+        Some(Mode::Light)
     }
 }
 

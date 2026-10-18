@@ -132,9 +132,41 @@ struct App {
     applied: Option<Mode>,
     settings_path: Option<PathBuf>,
     persist_theme: bool,
+    /// The desktop theme read at startup where the windowing layer cannot
+    /// report it (Linux); used only when egui's system theme is unknown.
+    fallback_system: Option<Mode>,
 }
 
 // ----- helpers ---------------------------------------------------------------
+
+/// A shortcut hint written with Ctrl, shown with this OS's modifier name
+/// (Cmd on macOS). The bindings themselves use `Modifiers::COMMAND`, which
+/// egui maps to Cmd on macOS and Ctrl elsewhere.
+fn keys(text: &str) -> String {
+    theme::shortcut_label(text, theme::Os::current())
+}
+
+/// The desktop colour scheme on Linux/BSD, where winit does not report the
+/// system theme on X11 (and often not on Wayland). Asks GNOME's setting,
+/// then `GTK_THEME`; returns None (FontStrike's default, Dark) if neither
+/// says. Windows and macOS report the theme through winit.
+fn desktop_theme_fallback() -> Option<Mode> {
+    if cfg!(any(windows, target_os = "macos")) {
+        return None;
+    }
+    let gsettings = std::process::Command::new("gsettings")
+        .args(["get", "org.gnome.desktop.interface", "color-scheme"])
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| theme::parse_gnome_color_scheme(&String::from_utf8_lossy(&o.stdout)));
+    gsettings.or_else(|| {
+        std::env::var("GTK_THEME")
+            .ok()
+            .and_then(|v| theme::parse_gtk_theme(&v))
+    })
+}
 
 fn decode_png(bytes: &[u8], max: usize) -> Option<egui::ColorImage> {
     let mut decoder = png::Decoder::new(std::io::Cursor::new(bytes));
@@ -321,6 +353,7 @@ impl App {
             applied: None,
             settings_path: None,
             persist_theme: false,
+            fallback_system: None,
         };
         app.select_default();
         if let Some(name) = select {
@@ -576,13 +609,16 @@ impl App {
     // ----- styling -------------------------------------------------------
 
     fn style(&mut self, ctx: &egui::Context) {
-        let system = ctx.system_theme().map(|t| {
-            if t == egui::Theme::Light {
-                Mode::Light
-            } else {
-                Mode::Dark
-            }
-        });
+        let system = ctx
+            .system_theme()
+            .map(|t| {
+                if t == egui::Theme::Light {
+                    Mode::Light
+                } else {
+                    Mode::Dark
+                }
+            })
+            .or(self.fallback_system);
         let mode = theme::resolve(self.theme_pref, system);
         if self.applied == Some(mode) {
             return;
@@ -717,6 +753,11 @@ impl App {
         if fire(Modifiers::COMMAND, Key::E) {
             self.export();
         }
+        // Cmd+Q on macOS, Ctrl+Q elsewhere. Routed through the close request
+        // so unsaved edits are confirmed first (see `update`).
+        if fire(Modifiers::COMMAND, Key::Q) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         if ctx.wants_keyboard_input() || self.project().is_none() {
             return; // typing in a field: leave editing keys alone
         }
@@ -837,7 +878,7 @@ impl App {
                         ui.menu_button("File", |ui| self.file_menu(ui, has));
                         ui.menu_button("Edit", |ui| self.edit_menu(ui, has));
                         ui.menu_button("View", |ui| {
-                            if ui.add(egui::Button::new("Fit glyph").shortcut_text("Ctrl+0")).clicked() {
+                            if ui.add(egui::Button::new("Fit glyph").shortcut_text(keys("Ctrl+0"))).clicked() {
                                 ui.close_menu();
                                 self.view.needs_fit = true;
                             }
@@ -845,7 +886,7 @@ impl App {
                             ui.separator();
                             ui.menu_button("Theme", |ui| {
                                 for pref in ThemePref::ALL {
-                                    let label = if pref == ThemePref::System { "System (follow Windows)" } else { pref.label() };
+                                    let label = if pref == ThemePref::System { theme::system_theme_label(theme::Os::current()) } else { pref.label() };
                                     if ui.radio(self.theme_pref == pref, label).clicked() {
                                         ui.close_menu();
                                         self.set_theme_pref(pref);
@@ -891,20 +932,20 @@ impl App {
                         let busy = self.export_rx.is_some();
                         if ui
                             .add_enabled(has && !busy, primary(if busy { "Exporting…" } else { "Export TTF" }))
-                            .on_hover_text("Compile, verify, and write a .ttf (Ctrl+E)")
+                            .on_hover_text(keys("Compile, verify, and write a .ttf (Ctrl+E)"))
                             .clicked()
                         {
                             self.export();
                         }
                         let dirty = self.session.has_unsaved();
-                        if ui.add_enabled(has && dirty, egui::Button::new("Save")).on_hover_text("Save the UFO source (Ctrl+S)").clicked() {
+                        if ui.add_enabled(has && dirty, egui::Button::new("Save")).on_hover_text(keys("Save the UFO source (Ctrl+S)")).clicked() {
                             self.save();
                         }
                         let (cu, cr) = self.project().map(|p| (p.can_undo(), p.can_redo())).unwrap_or_default();
-                        if ui.add_enabled(cr, egui::Button::new("Redo")).on_hover_text("Ctrl+Shift+Z").clicked() {
+                        if ui.add_enabled(cr, egui::Button::new("Redo")).on_hover_text(keys("Ctrl+Shift+Z")).clicked() {
                             self.undo(true);
                         }
-                        if ui.add_enabled(cu, egui::Button::new("Undo")).on_hover_text("Ctrl+Z").clicked() {
+                        if ui.add_enabled(cu, egui::Button::new("Undo")).on_hover_text(keys("Ctrl+Z")).clicked() {
                             self.undo(false);
                         }
                         if let Some(p) = self.project() {
@@ -921,7 +962,7 @@ impl App {
 
     fn file_menu(&mut self, ui: &mut egui::Ui, has: bool) {
         let item = |ui: &mut egui::Ui, enabled: bool, label: &str, keys: &str| {
-            let b = egui::Button::new(label).shortcut_text(keys);
+            let b = egui::Button::new(label).shortcut_text(self::keys(keys));
             let hit = ui.add_enabled(enabled, b).clicked();
             if hit {
                 ui.close_menu();
@@ -948,7 +989,7 @@ impl App {
             self.export();
         }
         ui.separator();
-        if item(ui, true, "Quit", "") {
+        if item(ui, true, "Quit", "Ctrl+Q") {
             ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
@@ -972,7 +1013,10 @@ impl App {
             .map(|l| format!("Redo {l}"))
             .unwrap_or_else(|| "Redo".into());
         if ui
-            .add_enabled(u.is_some(), egui::Button::new(ul).shortcut_text("Ctrl+Z"))
+            .add_enabled(
+                u.is_some(),
+                egui::Button::new(ul).shortcut_text(keys("Ctrl+Z")),
+            )
             .clicked()
         {
             ui.close_menu();
@@ -981,7 +1025,7 @@ impl App {
         if ui
             .add_enabled(
                 r.is_some(),
-                egui::Button::new(rl).shortcut_text("Ctrl+Shift+Z"),
+                egui::Button::new(rl).shortcut_text(keys("Ctrl+Shift+Z")),
             )
             .clicked()
         {
@@ -992,7 +1036,7 @@ impl App {
         if ui
             .add_enabled(
                 has,
-                egui::Button::new("Select all points").shortcut_text("Ctrl+A"),
+                egui::Button::new("Select all points").shortcut_text(keys("Ctrl+A")),
             )
             .clicked()
         {
@@ -2713,7 +2757,7 @@ impl App {
                             if let Some(p) = self.session.project.as_mut() {
                                 let r = p.delete_glyph(name);
                                 if self.report(r).is_some() {
-                                    self.info(Level::Info, format!("Deleted {name} (Ctrl+Z to undo)"));
+                                    self.info(Level::Info, keys(&format!("Deleted {name} (Ctrl+Z to undo)")));
                                     self.select_default();
                                 }
                             }
@@ -2732,6 +2776,7 @@ impl App {
                             ("Ctrl+Z, Ctrl+Shift+Z", "Undo, redo"),
                             ("Ctrl+S, Ctrl+Shift+S", "Save, save as"),
                             ("Ctrl+E", "Export TTF"),
+                            ("Ctrl+Q", "Quit (asks first if there are unsaved edits)"),
                             ("Arrows (+Shift)", "Nudge points 1 (10) units"),
                             ("Delete", "Delete selected points"),
                             ("Double-click segment", "Insert a point"),
@@ -2741,7 +2786,7 @@ impl App {
                             ("Middle or Space+drag", "Pan"),
                             ("Esc", "Cancel drag, close pen contour, clear selection"),
                         ] {
-                            ui.label(RichText::new(k).monospace());
+                            ui.label(RichText::new(keys(k)).monospace());
                             ui.label(d);
                             ui.end_row();
                         }
@@ -2879,9 +2924,16 @@ fn main() -> eframe::Result {
     };
     let capture = value("--capture").map(PathBuf::from);
     let select = value("--select");
-    let settings_path = value("--settings")
-        .map(PathBuf::from)
-        .or_else(Settings::default_path);
+    let settings_path = value("--settings").map(PathBuf::from).or_else(|| {
+        // Bring settings over from where an earlier build kept them
+        // (copied, never moved or deleted).
+        match Settings::migrate_default() {
+            Ok(Some(from)) => eprintln!("Settings copied from {}", from.display()),
+            Ok(None) => {}
+            Err(e) => eprintln!("Could not copy earlier settings: {e}"),
+        }
+        Settings::default_path()
+    });
     let theme_override = value("--theme").and_then(|t| ThemePref::parse(&t));
     let theme_pref = theme_override.unwrap_or_else(|| {
         settings_path
@@ -2931,10 +2983,22 @@ fn main() -> eframe::Result {
             height: icon.size[1] as u32,
         });
     }
-    let options = eframe::NativeOptions {
+    #[allow(unused_mut)]
+    let mut options = eframe::NativeOptions {
         viewport,
         ..Default::default()
     };
+    // winit's default macOS app menu binds Cmd+Q to `terminate:`, which ends
+    // the process without a close request, so unsaved edits would be lost
+    // without the usual "Discard changes?" question. FontStrike handles Cmd+Q
+    // itself (see `shortcuts`) and keeps its menus in the window.
+    #[cfg(target_os = "macos")]
+    {
+        use winit::platform::macos::EventLoopBuilderExtMacOS;
+        options.event_loop_builder = Some(Box::new(|builder| {
+            builder.with_default_menu(false);
+        }));
+    }
     eframe::run_native(
         "FontStrike",
         options,
@@ -2945,6 +3009,7 @@ fn main() -> eframe::Result {
             app.settings_path = settings_path;
             // A --theme override (used for captures) is not written to settings.
             app.persist_theme = theme_override.is_none();
+            app.fallback_system = desktop_theme_fallback();
             app.selection.extend(point);
             Ok(Box::new(app))
         }),
