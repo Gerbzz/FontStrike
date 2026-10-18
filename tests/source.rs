@@ -87,9 +87,13 @@ fn undo_and_invalid_open_outline_keep_source_intact() {
     );
     assert_eq!(project.width("A").unwrap(), 620.0);
     project.set_width("A", 650.0).unwrap();
+    assert!(project.can_undo());
+    assert!(!project.can_redo());
     project.undo().unwrap();
+    assert!(project.can_redo());
     assert_eq!(project.width("A").unwrap(), 620.0);
     project.redo().unwrap();
+    assert!(!project.can_redo());
     assert_eq!(project.width("A").unwrap(), 650.0);
 }
 

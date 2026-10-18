@@ -233,6 +233,12 @@ impl FontProject {
         self.redo.push(std::mem::replace(&mut self.font, previous));
         Ok(())
     }
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
+    }
     pub fn redo(&mut self) -> Result<()> {
         let next = self
             .redo
