@@ -52,7 +52,7 @@ Desktop flags (used for QA captures):
 --about                  open the About dialog
 --size WxH               window size (minimum 900x600)
 --theme dark|light|system  use this theme for this run only (not saved)
---settings FILE          settings file (default %APPDATA%FontStrikesettings.ini)
+--settings FILE          settings file (default %APPDATA%\FontStrike\settings.ini)
 --capture FILE.png       save the rendered window after ~20 frames and exit
 ```
 
