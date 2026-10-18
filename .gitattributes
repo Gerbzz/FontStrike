@@ -1,0 +1,9 @@
+# Text files are stored and checked out with LF on every OS, so sources,
+# fixtures written from string literals, and docs are byte-identical on
+# Windows, macOS, and Linux regardless of core.autocrlf.
+* text=auto eol=lf
+
+*.png binary
+*.ttf binary
+*.otf binary
+*.ico binary
