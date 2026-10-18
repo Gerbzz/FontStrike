@@ -79,6 +79,19 @@ pub fn autosave_path(root: &Path) -> PathBuf {
 fn autosave_tmp_path(root: &Path) -> PathBuf {
     sibling(root, ".fontstrike-autosave-tmp")
 }
+fn autosave_backup_path(root: &Path) -> PathBuf {
+    sibling(root, ".fontstrike-autosave-backup")
+}
+
+pub(crate) fn autosave_to_restore(root: &Path) -> Option<PathBuf> {
+    let current = autosave_path(root);
+    if current.is_dir() {
+        Some(current)
+    } else {
+        let backup = autosave_backup_path(root);
+        backup.is_dir().then_some(backup)
+    }
+}
 
 fn io_err(context: &str, e: impl std::fmt::Display) -> Error {
     Error::new(format!("{context}: {e}"))
@@ -405,8 +418,10 @@ pub(crate) fn save(
                 fs::create_dir_all(&to).map_err(|e| io_err("preserve folder", e))?;
             } else if from.is_file() {
                 if to.exists() {
-                    // The model wrote a file of the same name; keep the model's.
-                    continue;
+                    return Err(Error::new(format!(
+                        "staged model file conflicts with preserved {}; source preserved",
+                        rel.display()
+                    )));
                 }
                 if let Some(parent) = to.parent() {
                     fs::create_dir_all(parent).map_err(|e| io_err("preserve folder", e))?;
@@ -608,19 +623,42 @@ pub fn recover(root: &Path) -> Result<RecoveryReport> {
 pub(crate) fn write_autosave(font: &Font, root: &Path) -> Result<()> {
     let tmp = autosave_tmp_path(root);
     let dest = autosave_path(root);
+    let backup = autosave_backup_path(root);
+    if backup.exists() {
+        if !dest.is_dir() {
+            return Err(Error::new(
+                "an interrupted autosave has a recoverable previous copy; restore or discard it first",
+            ));
+        }
+        // A complete new copy is already in place; the older backup can go.
+        fs::remove_dir_all(&backup).map_err(|e| io_err("clear old autosave backup", e))?;
+    }
     if tmp.exists() {
         fs::remove_dir_all(&tmp).map_err(|e| io_err("clear autosave", e))?;
     }
     write_model(font, &tmp)?;
     sync_tree(&tmp)?;
     if dest.exists() {
-        fs::remove_dir_all(&dest).map_err(|e| io_err("replace autosave", e))?;
+        rename_retry(&dest, &backup).map_err(|e| io_err("back up autosave", e))?;
     }
-    rename_retry(&tmp, &dest).map_err(|e| io_err("place autosave", e))
+    if let Err(error) = rename_retry(&tmp, &dest) {
+        if backup.exists() {
+            let _ = rename_retry(&backup, &dest);
+        }
+        return Err(io_err("place autosave", error));
+    }
+    if backup.exists() {
+        fs::remove_dir_all(&backup).map_err(|e| io_err("clear old autosave backup", e))?;
+    }
+    Ok(())
 }
 
 pub(crate) fn remove_autosave(root: &Path) -> Result<()> {
-    for p in [autosave_path(root), autosave_tmp_path(root)] {
+    for p in [
+        autosave_path(root),
+        autosave_tmp_path(root),
+        autosave_backup_path(root),
+    ] {
         if p.exists() {
             fs::remove_dir_all(&p).map_err(|e| io_err("remove autosave", e))?;
         }

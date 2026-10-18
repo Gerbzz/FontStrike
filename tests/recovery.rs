@@ -188,3 +188,37 @@ fn failed_export_keeps_previous_file_and_stale_temp_files_are_not_touched() {
     p.export_ttf(&ttf).unwrap();
     assert_eq!(tree(&root), source_before);
 }
+
+#[test]
+fn interrupted_autosave_swap_still_offers_previous_copy() {
+    let (root, mut project) = fresh("autosave-swap");
+    project.set_width("A", 713.0).unwrap();
+    assert!(project.autosave().unwrap());
+    let autosave = fontstrike::storage::autosave_path(&root);
+    let backup = root.with_file_name("Font.ufo.fontstrike-autosave-backup");
+    fs::rename(&autosave, &backup).unwrap(); // crash after old copy moved aside
+
+    let mut session = Session::new();
+    assert_eq!(
+        session.open_font(Some(root.clone()), false),
+        OpenOutcome::AutosaveAvailable
+    );
+    assert_eq!(session.resolve_autosave(&root, true), OpenOutcome::Opened);
+    assert_eq!(session.project.as_ref().unwrap().width("A").unwrap(), 713.0);
+}
+
+#[test]
+fn replacing_autosave_keeps_latest_copy_and_clears_backup() {
+    let (root, mut project) = fresh("autosave-replace");
+    project.set_width("A", 713.0).unwrap();
+    assert!(project.autosave().unwrap());
+    project.set_width("A", 714.0).unwrap();
+    assert!(project.autosave().unwrap());
+    assert!(
+        !root
+            .with_file_name("Font.ufo.fontstrike-autosave-backup")
+            .exists()
+    );
+    let restored = FontProject::open_autosave(&root).unwrap();
+    assert_eq!(restored.width("A").unwrap(), 714.0);
+}

@@ -260,3 +260,33 @@ fn external_change_after_open_is_refused_and_not_overwritten() {
     );
     assert!(project.is_dirty(), "the refused edit is still in memory");
 }
+
+#[test]
+fn unmodelled_glyph_file_collision_refuses_save_without_losing_bytes() {
+    let dir = scratch("unknown-glyph-collision");
+    let root = dir.join("Collision.ufo");
+    rich_ufo(&root);
+    let hidden = root.join("glyphs/b.glif");
+    fs::write(&hidden, b"unknown glyph file owned by another editor").unwrap();
+    let mut project = FontProject::open(&root).unwrap();
+    project.add_glyph("b", &['b'], 500.0).unwrap();
+    let err = project.save().unwrap_err().to_string();
+    assert!(err.contains("b.glif"), "{err}");
+    assert_eq!(
+        fs::read(&hidden).unwrap(),
+        b"unknown glyph file owned by another editor"
+    );
+}
+
+#[test]
+fn save_as_inside_source_ufo_is_refused_before_copying() {
+    let dir = scratch("nested-save-as");
+    let root = dir.join("Source.ufo");
+    let mut project = FontProject::create(&root, "Nested", "Regular").unwrap();
+    let before = tree(&root);
+    let nested = root.join("Nested.ufo");
+    let err = project.save_as(&nested).unwrap_err().to_string();
+    assert!(err.contains("inside"), "{err}");
+    assert!(!nested.exists());
+    assert_eq!(tree(&root), before);
+}

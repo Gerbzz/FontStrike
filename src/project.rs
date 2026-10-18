@@ -9,6 +9,7 @@ use norad::{
     Codepoints, Contour, ContourPoint, Font, FontInfo, FormatVersion, Glyph, Groups, Kerning, Name,
     Plist, PointType,
 };
+use std::fs;
 use std::path::{Path, PathBuf};
 
 const UNDO_LIMIT: usize = 200;
@@ -277,14 +278,16 @@ impl FontProject {
 
     /// True when an autosave of unsaved edits exists for `root`.
     pub fn autosave_available(root: &Path) -> bool {
-        storage::autosave_path(root).is_dir()
+        storage::autosave_to_restore(root).is_some()
     }
 
     /// Opens `root` and replaces its glyphs, kerning, and info with the
     /// autosaved edits. The result is unsaved until [`FontProject::save`].
     pub fn open_autosave(root: &Path) -> Result<Self> {
         let mut project = Self::open(root)?;
-        let autosaved = load_font(&storage::autosave_path(root))?;
+        let path = storage::autosave_to_restore(root)
+            .ok_or_else(|| Error::new("no autosave copy is available"))?;
+        let autosaved = load_font(&path)?;
         let mut parts = Vec::new();
         // Express the restore as one undoable edit.
         let mut keys = vec![Key::Kerning, Key::Groups, Key::Info, Key::Lib];
@@ -377,6 +380,15 @@ impl FontProject {
             return Err(Error::new(
                 "choose a new .ufo name; that one already exists",
             ));
+        }
+        if self.root.exists() {
+            let source = fs::canonicalize(&self.root)
+                .map_err(|e| Error::new(format!("inspect source UFO: {e}")))?;
+            let parent = fs::canonicalize(new_root.parent().unwrap_or(Path::new(".")))
+                .map_err(|e| Error::new(format!("inspect Save As folder: {e}")))?;
+            if parent.starts_with(&source) {
+                return Err(Error::new("Save As destination is inside the source UFO"));
+            }
         }
         let mut disk = DiskState::default();
         if self.root.exists() {
