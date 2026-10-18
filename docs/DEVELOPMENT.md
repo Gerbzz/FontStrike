@@ -52,7 +52,7 @@ Desktop flags (used for QA captures):
 --about                  open the About dialog
 --size WxH               window size (minimum 900x600)
 --theme dark|light|system  use this theme for this run only (not saved)
---settings FILE          settings file (default %APPDATA%\FontStrike\settings.ini)
+--settings FILE          settings file (default: the per-OS location in README, Platforms)
 --capture FILE.png       save the rendered window after ~20 frames and exit
 ```
 
@@ -81,6 +81,7 @@ fontstrike recover FONT.ufo
 | `tests/export.rs` | Readback of tables, advances, outline bounds; rustybuzz-shaped kerning for the synthetic font and for group kerning in the rich fixture. |
 | `tests/source.rs`, `tests/cli.rs` | VectorCraft path round trip, CLI workflow. |
 | `tests/theme.rs` | Theme choice persists across restarts; bad settings files fall back to Dark; unknown settings lines survive; System resolution. |
+| `tests/portability.rs` | Per-OS settings folders and migration that keeps the old file, Cmd/Ctrl shortcut labels, Linux theme detection parsing, `/` separators in notes, LF-only saved files, symlink refusal (skipped where the OS forbids creating links). |
 | unit tests | Outline operations, rasteriser, VectorCraft path donor. |
 
 On the development machine, Windows Application Control once blocked the (empty) unit-test

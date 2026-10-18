@@ -7,7 +7,7 @@
 <p align="center"><strong>Draw the shape of a letter, then keep it editable.</strong></p>
 
 <p align="center">
-  A Windows desktop editor for UFO font sources: glyph outlines, metrics, kerning,<br>
+  A desktop editor for UFO font sources: glyph outlines, metrics, kerning,<br>
   lossless saves with undo/redo and crash recovery, and verified TrueType export.
 </p>
 
@@ -15,6 +15,7 @@
   <a href="#what-works">What works</a> ·
   <a href="#supported-sources">Supported sources</a> ·
   <a href="#get-started">Get started</a> ·
+  <a href="#platforms">Platforms</a> ·
   <a href="#status-and-limits">Status and limits</a> ·
   <a href="docs/VALIDATION.md">Export validation</a> ·
   <a href="docs/DEVELOPMENT.md">Development</a> ·
@@ -70,7 +71,7 @@ coordinates in [`src/demo.rs`](src/demo.rs), in the default dark theme. Captured
   to overwrite them.
 
 ### Export
-- **Export TTF** (Ctrl+E) compiles the current edits with [fontc](https://github.com/googlefonts/fontc)
+- **Export TTF** (Ctrl+E; Cmd+E on macOS) compiles the current edits with [fontc](https://github.com/googlefonts/fontc)
   on a background thread, without modifying the UFO. The bytes are read back with
   ttf-parser (tables, unitsPerEm, family name, every Unicode mapping and advance, outline
   bounds) and kerning pairs are shaped with rustybuzz, before the file atomically replaces
@@ -81,14 +82,16 @@ coordinates in [`src/demo.rs`](src/demo.rs), in the default dark theme. Captured
 ### Interface
 - Menu bar, Select/Pen tools, Undo/Redo, Save, and Export in one compact toolbar; the file
   name shows its unsaved state. PWDS branding appears only on the start card and in About.
-- Unsaved-change prompts on New, Open, and Quit. Keyboard shortcuts (Help → Keyboard
-  shortcuts). Resizable panels that narrow on small windows (minimum 900 × 600).
+- Unsaved-change prompts on New, Open, and Quit (Ctrl+Q, or Cmd+Q on macOS, asks too).
+  Keyboard shortcuts (Help → Keyboard shortcuts) use Ctrl on Windows and Linux and Cmd on
+  macOS. Resizable panels that narrow on small windows (minimum 900 × 600).
 - **Dark (default), Light, or System theme** under View → Theme. The choice applies at once
-  and is remembered in `%APPDATA%\FontStrike\settings.ini`. Dark is the original look; Light
-  keeps the orange accent, darkened so text, buttons, focus rings, and status colours meet
-  WCAG AA (checked by unit tests), with its own canvas, outline, point, and preview colours.
-  System follows Windows and falls back to Dark if the OS theme is unknown.
-- AccessKit is enabled, so controls are exposed to Windows screen readers; form fields are
+  and is remembered in the per-OS settings file (see [Platforms](#platforms)). Dark is the
+  original look; Light keeps the orange accent, darkened so text, buttons, focus rings, and
+  status colours meet WCAG AA (checked by unit tests), with its own canvas, outline, point,
+  and preview colours. System follows the OS theme (on Linux, GNOME's `color-scheme` or
+  `GTK_THEME` when the window system does not report it) and falls back to Dark if unknown.
+- AccessKit is enabled, so controls are exposed to screen readers; form fields are
   labelled and the glyph grid, canvas, and preview describe themselves.
 
 ## Supported sources
@@ -112,16 +115,17 @@ split. The **Source notes** panel lists what applies to the open font.
 
 ## Get started
 
-Requires Windows and a Rust toolchain with edition 2024 support (tested with rustc 1.96.1).
+Requires a Rust toolchain with edition 2024 support (tested locally with rustc 1.96.1) and,
+on Linux, the system packages listed under [Platforms](#platforms).
 
-```powershell
+```sh
 cargo test --locked --features desktop
 cargo run --locked --features desktop --bin fontstrike-desktop
 ```
 
 Start with **Try the synthetic test font…** on the start card, or from the command line:
 
-```powershell
+```sh
 cargo run --locked --bin fontstrike -- demo TestSans.ufo
 cargo run --locked --bin fontstrike -- export TestSans.ufo TestSans.ttf
 cargo run --locked --features desktop --bin fontstrike-desktop -- --project TestSans.ufo
