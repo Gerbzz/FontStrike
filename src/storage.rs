@@ -93,6 +93,18 @@ pub(crate) fn autosave_to_restore(root: &Path) -> Option<PathBuf> {
     }
 }
 
+/// A validated backup-only autosave becomes the active copy before editing
+/// resumes. The rename is atomic, so a crash leaves a discoverable copy at
+/// either path.
+pub(crate) fn promote_autosave_backup(root: &Path) -> Result<()> {
+    let backup = autosave_backup_path(root);
+    let dest = autosave_path(root);
+    if !backup.is_dir() || dest.exists() {
+        return Err(Error::new("autosave backup changed during recovery"));
+    }
+    rename_retry(&backup, &dest).map_err(|e| io_err("restore autosave backup", e))
+}
+
 fn io_err(context: &str, e: impl std::fmt::Display) -> Error {
     Error::new(format!("{context}: {e}"))
 }

@@ -288,6 +288,9 @@ impl FontProject {
         let path = storage::autosave_to_restore(root)
             .ok_or_else(|| Error::new("no autosave copy is available"))?;
         let autosaved = load_font(&path)?;
+        if path != storage::autosave_path(root) {
+            storage::promote_autosave_backup(root)?;
+        }
         let mut parts = Vec::new();
         // Express the restore as one undoable edit.
         let mut keys = vec![Key::Kerning, Key::Groups, Key::Info, Key::Lib];

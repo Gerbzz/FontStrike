@@ -222,3 +222,39 @@ fn replacing_autosave_keeps_latest_copy_and_clears_backup() {
     let restored = FontProject::open_autosave(&root).unwrap();
     assert_eq!(restored.width("A").unwrap(), 714.0);
 }
+
+#[test]
+fn restored_backup_can_checkpoint_newer_unsaved_edits() {
+    let (root, mut project) = fresh("autosave-backup-checkpoint");
+    project.set_width("A", 713.0).unwrap();
+    assert!(project.autosave().unwrap());
+    let autosave = fontstrike::storage::autosave_path(&root);
+    let backup = root.with_file_name("Font.ufo.fontstrike-autosave-backup");
+    fs::rename(&autosave, &backup).unwrap();
+
+    let mut session = Session::new();
+    assert_eq!(
+        session.open_font(Some(root.clone()), false),
+        OpenOutcome::AutosaveAvailable
+    );
+    assert_eq!(session.resolve_autosave(&root, true), OpenOutcome::Opened);
+    let recovered = session.project.as_mut().unwrap();
+    assert_eq!(recovered.width("A").unwrap(), 713.0);
+    recovered.set_width("A", 714.0).unwrap();
+    assert!(
+        recovered.autosave().unwrap(),
+        "recovered edits must be checkpointable"
+    );
+    session.project = None; // another crash before an explicit Save
+
+    let mut reopened = Session::new();
+    assert_eq!(
+        reopened.open_font(Some(root.clone()), false),
+        OpenOutcome::AutosaveAvailable
+    );
+    assert_eq!(reopened.resolve_autosave(&root, true), OpenOutcome::Opened);
+    assert_eq!(
+        reopened.project.as_ref().unwrap().width("A").unwrap(),
+        714.0
+    );
+}
