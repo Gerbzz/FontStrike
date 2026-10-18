@@ -1,47 +1,96 @@
 # FontStrike development and verification
 
-This guide records the current Windows engineering workflow and bounded checks. Start with the [overview](../README.md).
+Start with the [overview](../README.md). This page covers architecture, commands, tests,
+and how screenshots and validation records are produced.
 
-## Draw and export a glyph
+## Architecture
 
-1. Use **New UFO** or open a UFO created by this build, then select or name a glyph.
-2. Create a contour and adjust its points, advance width, and a pair-kerning value.
-3. Save the editable outline, then choose **Export TTF**. The generated font is independently parsed before it replaces a prior export.
+| Module | Responsibility |
+| --- | --- |
+| `src/project.rs` | `FontProject`: the norad `Font` model, every edit, part-based undo/redo (only the glyphs, kerning, groups, info, or lib an edit touches are snapshotted), gestures that group a drag into one step, dirty tracking. |
+| `src/outline.rs` | Point-level contour operations on UFO points (segments, insert, delete/merge, line↔curve, reverse, ellipse/polygon builders, bounds with resolved components, hit testing). |
+| `src/storage.rs` | Snapshot of the UFO tree, classification of model-owned vs. verbatim files, the stage → verify → journal → swap save, `recover`, autosave. |
+| `src/export.rs` | `ExportJob`: write the model to a temporary UFO, compile with fontc, verify with ttf-parser and rustybuzz, atomic replace. |
+| `src/session.rs` | UI-independent document controller: New/Open/Save As/Export flows, cancelled dialogs, unsaved-change guards, recovery and autosave prompts. |
+| `src/raster.rs` | Small anti-aliased non-zero rasteriser for thumbnails and previews. |
+| `src/demo.rs` | The synthetic test font. |
+| `src/bin/desktop.rs` | egui interface only. |
+| `src/main.rs` | `fontstrike` CLI. |
 
-External UFOs cannot yet be modified safely, and this bounded export is not a general font-compatibility claim.
+### Save pipeline
 
-## Build and use
+1. Refuse if an interrupted save is pending or the UFO changed on disk since it was opened.
+2. Write the model to `<name>.ufo.fontstrike-staging` (always UFO 3).
+3. Copy verbatim files (unknown root files and folders, unknown files in layer folders) and
+   merge unknown `fontinfo.plist` / `layerinfo.plist` keys.
+4. Reload the stage with norad and compare font info, lib, groups, kerning, features, and
+   every glyph of every layer with the model. Check that every original file exists in the
+   stage unless the model owns it (glyph files, known plists, `data/`, `images/`).
+5. Flush files, write `<name>.ufo.fontstrike-journal`, rename the UFO to
+   `<name>.ufo.fontstrike-backup`, rename the stage into place, remove backup and journal.
 
-Launch on Windows from the repository root:
+`recover` rolls a journalled save forward, restores a backup when the UFO is missing, and
+renames any other leftover to `<name>.ufo.fontstrike-recovered-N` rather than deleting it.
+
+## Commands
 
 ```powershell
-$env:CARGO_BUILD_JOBS='1'
-$env:CARGO_TARGET_DIR='..\target-fontstrike'
+cargo fmt --check
+cargo clippy --locked --features desktop --all-targets
 cargo test --locked --features desktop
 cargo run --locked --features desktop --bin fontstrike-desktop
 ```
 
-A fresh checkout needs registry access for its first dependency download. After the registry cache is populated, add `--offline` if an offline build is needed.
-
-Use **New UFO** or **Open UFO**, select a glyph, enter a name and one Unicode character, set its width, create a rectangle contour, then drag or numerically adjust its points. **Save outline & width** commits numeric edits; pointer drag commits on release. **Save pair** writes explicit glyph kerning. **Export TTF** selects a local output path and compiles the saved UFO. Undo/redo is currently in memory for the open session; saved UFO data persists across reopen. Ctrl+S saves the current outline. The `--demo PATH.ufo --capture FILE.png` flags create a source fixture and capture the running native UI for QA.
-
-Command line source workflow:
+Desktop flags (used for QA captures):
 
 ```text
-cargo run --locked --bin fontstrike -- new Example.ufo Example Regular
-cargo run --locked --bin fontstrike -- rect Example.ufo A A 620 100 0 520 700
-cargo run --locked --bin fontstrike -- rect Example.ufo V V 600 100 0 500 700
-cargo run --locked --bin fontstrike -- kern Example.ufo A V -80
-cargo run --locked --bin fontstrike -- export Example.ufo Example.ttf
-cargo run --locked --bin fontstrike -- status Example.ufo
+--demo PATH.ufo          open, or create, the synthetic test font
+--project PATH.ufo       open a UFO
+--select GLYPH           select a glyph
+--point C:P              select contour C, point P
+--about                  open the About dialog
+--size WxH               window size (minimum 900x600)
+--capture FILE.png       save the rendered window after ~20 frames and exit
 ```
 
-`rect` is a temporary numeric shape-entry command and accepts conventional y-up font coordinates. The library supports arbitrary closed cubic `PathData` outlines and in-memory undo/redo. Opening external UFOs for modification is deliberately blocked until unknown layer, feature, data, and lib preservation fixtures pass; a `.fontstrike-v1` marker identifies files created by this build.
+CLI:
 
-The export acceptance fixture checks `cmap`, `glyf`, `hmtx`, `GPOS`, and `name` tables, independent outline bounds, mapped advance widths, and shaped AV/To pair advances through rustybuzz. It proves those specific glyphs and kerning pairs, not arbitrary font behavior. The editable UFO is the source of truth; a failed compile/readback leaves a previous TTF intact.
+```text
+fontstrike new FONT.ufo FAMILY STYLE
+fontstrike demo FONT.ufo
+fontstrike rect FONT.ufo GLYPH UNICODE|- WIDTH X_MIN Y_MIN X_MAX Y_MAX
+fontstrike width FONT.ufo GLYPH ADVANCE
+fontstrike kern FONT.ufo LEFT RIGHT AMOUNT
+fontstrike export FONT.ufo OUTPUT.ttf
+fontstrike status FONT.ufo
+fontstrike recover FONT.ufo
+```
 
-Current limits: no persistent undo journal, shaped proof in the app, DesignCraft integration, component editing, point insertion/deletion, or external UFO write support. A whole-tree content snapshot refuses UFO changes made after open; staging refuses to replace a source containing files the writer would omit. TTF compilation currently runs on the UI thread and may pause the window for large UFOs. A completed general-purpose font is not claimed. The next gates are persistent recovery, richer point tools, screen-reader and pointer verification, and an independent real-world font fixture. Planning history and QA captures are not included in this standalone source checkout.
+## Test map
+
+| File | Covers |
+| --- | --- |
+| `tests/editing.rs` | Undo and redo of each of 20 edit types, save and reopen after each; gestures and cancelled gestures; point semantics; side bearings; refused invalid edits. |
+| `tests/preservation.rs` | A hand-written rich UFO (extra layer, features, groups, data, unknown files and keys, components, anchors, guidelines, identifiers, qcurves) edited and saved with everything else intact; byte-identical re-save; group kerning; rename across layers; UFO 2 upgrade; external-change refusal. |
+| `tests/corrupt.rs` | Missing or garbage metainfo, format 4, malformed and unknown-element glif, missing glif, truncated plist, wrong value types, `.ufoz`, missing folder; all refused without changing a byte. Failed open keeps the current document. |
+| `tests/recovery.rs` | Interruption after stage, journal, backup rename, and swap, each recovered to the old or new version; legacy backup restore; session recovery and autosave restore/discard; repeated saves and exports leave no temporary files; failed export keeps the previous file; export does not modify the source. |
+| `tests/session.rs` | Cancelled New/Open/Save As/Export dialogs write nothing; unsaved-change guard; Save As copies unmodelled files. |
+| `tests/export.rs` | Readback of tables, advances, outline bounds; rustybuzz-shaped kerning for the synthetic font and for group kerning in the rich fixture. |
+| `tests/source.rs`, `tests/cli.rs` | VectorCraft path round trip, CLI workflow. |
+| unit tests | Outline operations, rasteriser, VectorCraft path donor. |
+
+On the development machine, Windows Application Control once blocked the (empty) unit-test
+executable generated for the desktop binary (`os error 4551`) while Smart App Control was still
+enforcing; later runs of the same command passed. If it happens, run
+`cargo test --locked --features desktop --no-fail-fast` to see every other result.
+
+## Screenshots and validation
+
+Screenshots in `docs/screenshots/` are produced with `--capture`, which saves the frame
+egui rendered for the real window. Export validation commands and recorded output are in
+[VALIDATION.md](VALIDATION.md); `tools/validate-export.cjs` is the Node.js script used.
 
 ## Source terms
 
-No first-party license grant is stated for this app in this checkout. `THIRD_PARTY.md` records attribution for identified upstream material; the included donor license files, where present, apply to that material.
+No first-party licence grant is stated for this app in this checkout. `THIRD_PARTY.md`
+records attribution for upstream material.
