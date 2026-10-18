@@ -8,29 +8,40 @@ use eframe::egui::{
 use fontstrike::norad::{Glyph, PointType};
 use fontstrike::outline::{self, SegmentKind};
 use fontstrike::session::{Level, Notice, OpenOutcome, Session};
+use fontstrike::theme::{self, Mode, Palette, Settings, ThemePref};
 use fontstrike::{ExportReport, FontMetrics, FontProject, PointId, raster};
 use kurbo::{Affine, BezPath, Point};
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-// ----- palette ---------------------------------------------------------------
-const BG: Color32 = Color32::from_rgb(17, 20, 24);
-const CANVAS: Color32 = Color32::from_rgb(21, 25, 30);
-const PANEL: Color32 = Color32::from_rgb(27, 32, 38);
-const RAISED: Color32 = Color32::from_rgb(35, 41, 48);
-const LINE: Color32 = Color32::from_rgb(52, 60, 69);
-const GUIDE: Color32 = Color32::from_rgb(64, 74, 84);
-const TEXT: Color32 = Color32::from_rgb(230, 235, 236);
-const MUTED: Color32 = Color32::from_rgb(158, 170, 176);
-const ACCENT: Color32 = Color32::from_rgb(242, 178, 102);
-const ACCENT_DIM: Color32 = Color32::from_rgb(140, 100, 58);
-const SELECT: Color32 = Color32::from_rgb(110, 182, 255);
-const SUCCESS: Color32 = Color32::from_rgb(126, 214, 152);
-const WARN: Color32 = Color32::from_rgb(246, 204, 104);
-const DANGER: Color32 = Color32::from_rgb(255, 128, 118);
-const COMPONENT: Color32 = Color32::from_rgb(132, 160, 214);
+// ----- palette (see fontstrike::theme) --------------------------------------
+static LIGHT_MODE: AtomicBool = AtomicBool::new(false);
+
+fn pal() -> &'static Palette {
+    theme::palette(if LIGHT_MODE.load(Ordering::Relaxed) {
+        Mode::Light
+    } else {
+        Mode::Dark
+    })
+}
+fn rgb(c: theme::Rgb) -> Color32 {
+    Color32::from_rgb(c.0, c.1, c.2)
+}
+macro_rules! tokens {
+    ($($f:ident => $field:ident),* $(,)?) => { $(fn $f() -> Color32 { rgb(pal().$field) })* };
+}
+tokens!(c_bg => bg, c_canvas => canvas, c_panel => panel, c_raised => raised, c_line => line, c_guide => guide, c_text => text, c_muted => muted, c_accent => accent, c_accent_fill => accent_fill, c_on_accent => on_accent, c_accent_dim => accent_dim, c_select => select, c_success => success, c_warn => warn, c_danger => danger, c_component => component);
+/// Text on the active tool button (the original dark look uses the window background).
+fn c_tool_on() -> Color32 {
+    if LIGHT_MODE.load(Ordering::Relaxed) {
+        c_on_accent()
+    } else {
+        c_bg()
+    }
+}
 
 const LOGO_PNG: &[u8] = include_bytes!("../../assets/branding/FontStrike.png");
 const PWDS_PNG: &[u8] = include_bytes!("../../assets/branding/PWDS-logo.png");
@@ -117,7 +128,10 @@ struct App {
     capture: Option<PathBuf>,
     capture_requested: bool,
     frames: usize,
-    styled: bool,
+    theme_pref: ThemePref,
+    applied: Option<Mode>,
+    settings_path: Option<PathBuf>,
+    persist_theme: bool,
 }
 
 // ----- helpers ---------------------------------------------------------------
@@ -227,7 +241,7 @@ fn format_unicodes(cps: &[char]) -> String {
 }
 
 fn section(ui: &mut egui::Ui, title: &str, open: bool, add: impl FnOnce(&mut egui::Ui)) {
-    egui::CollapsingHeader::new(RichText::new(title).strong().color(TEXT))
+    egui::CollapsingHeader::new(RichText::new(title).strong().color(c_text()))
         .default_open(open)
         .show(ui, |ui| {
             ui.add_space(2.0);
@@ -237,16 +251,16 @@ fn section(ui: &mut egui::Ui, title: &str, open: bool, add: impl FnOnce(&mut egu
 }
 
 fn hint(ui: &mut egui::Ui, text: &str) {
-    ui.add(egui::Label::new(RichText::new(text).small().color(MUTED)).wrap());
+    ui.add(egui::Label::new(RichText::new(text).small().color(c_muted())).wrap());
 }
 
 fn primary(text: &str) -> egui::Button<'static> {
     egui::Button::new(
         RichText::new(text.to_string())
-            .color(Color32::from_rgb(28, 22, 14))
+            .color(c_on_accent())
             .strong(),
     )
-    .fill(ACCENT)
+    .fill(c_accent_fill())
 }
 
 fn truncate(s: &str, n: usize) -> String {
@@ -303,7 +317,10 @@ impl App {
             capture,
             capture_requested: false,
             frames: 0,
-            styled: false,
+            theme_pref: ThemePref::Dark,
+            applied: None,
+            settings_path: None,
+            persist_theme: false,
         };
         app.select_default();
         if let Some(name) = select {
@@ -559,10 +576,29 @@ impl App {
     // ----- styling -------------------------------------------------------
 
     fn style(&mut self, ctx: &egui::Context) {
-        if self.styled {
+        let system = ctx.system_theme().map(|t| {
+            if t == egui::Theme::Light {
+                Mode::Light
+            } else {
+                Mode::Dark
+            }
+        });
+        let mode = theme::resolve(self.theme_pref, system);
+        if self.applied == Some(mode) {
             return;
         }
-        self.styled = true;
+        self.applied = Some(mode);
+        let light = mode == Mode::Light;
+        LIGHT_MODE.store(light, Ordering::Relaxed);
+        ctx.set_theme(if light {
+            egui::Theme::Light
+        } else {
+            egui::Theme::Dark
+        });
+        // Theme-dependent caches.
+        self.thumbs.clear();
+        self.preview_tex = None;
+        self.canvas_fill = None;
         let mut style = (*ctx.style()).clone();
         style.text_styles = [
             (
@@ -587,17 +623,21 @@ impl App {
         style.spacing.item_spacing = vec2(8.0, 7.0);
         style.spacing.button_padding = vec2(10.0, 5.0);
         style.spacing.interact_size = vec2(40.0, 28.0);
-        let mut v = egui::Visuals::dark();
-        v.override_text_color = Some(TEXT);
-        v.panel_fill = PANEL;
-        v.window_fill = RAISED;
-        v.extreme_bg_color = Color32::from_rgb(14, 17, 20);
-        v.faint_bg_color = RAISED;
-        v.window_stroke = Stroke::new(1.0, LINE);
+        let mut v = if light {
+            egui::Visuals::light()
+        } else {
+            egui::Visuals::dark()
+        };
+        v.override_text_color = Some(c_text());
+        v.panel_fill = c_panel();
+        v.window_fill = c_raised();
+        v.extreme_bg_color = rgb(pal().field);
+        v.faint_bg_color = c_raised();
+        v.window_stroke = Stroke::new(1.0, c_line());
         v.window_rounding = Rounding::same(10.0);
-        v.selection.bg_fill = Color32::from_rgb(56, 86, 120);
-        v.selection.stroke = Stroke::new(1.5, SELECT);
-        v.hyperlink_color = SELECT;
+        v.selection.bg_fill = rgb(pal().selection_bg);
+        v.selection.stroke = Stroke::new(1.5, c_select());
+        v.hyperlink_color = c_select();
         for w in [
             &mut v.widgets.inactive,
             &mut v.widgets.hovered,
@@ -606,22 +646,53 @@ impl App {
         ] {
             w.rounding = Rounding::same(6.0);
         }
-        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, LINE);
-        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, TEXT);
-        v.widgets.inactive.bg_fill = RAISED;
-        v.widgets.inactive.weak_bg_fill = RAISED;
-        v.widgets.inactive.fg_stroke = Stroke::new(1.0, TEXT);
-        v.widgets.hovered.bg_fill = Color32::from_rgb(46, 54, 63);
-        v.widgets.hovered.weak_bg_fill = Color32::from_rgb(46, 54, 63);
-        v.widgets.hovered.bg_stroke = Stroke::new(1.0, Color32::from_rgb(92, 104, 116));
-        v.widgets.active.bg_fill = Color32::from_rgb(58, 68, 79);
-        v.widgets.active.weak_bg_fill = Color32::from_rgb(58, 68, 79);
+        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, c_line());
+        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, c_text());
+        v.widgets.inactive.bg_fill = c_raised();
+        v.widgets.inactive.weak_bg_fill = c_raised();
+        v.widgets.inactive.fg_stroke = Stroke::new(1.0, c_text());
+        v.widgets.hovered.bg_fill = rgb(pal().hovered);
+        v.widgets.hovered.weak_bg_fill = rgb(pal().hovered);
+        v.widgets.hovered.bg_stroke = Stroke::new(1.0, rgb(pal().hover_stroke));
+        v.widgets.active.bg_fill = rgb(pal().pressed);
+        v.widgets.active.weak_bg_fill = rgb(pal().pressed);
+        if light {
+            // Outline inputs and buttons so they stay distinct on pale panels,
+            // and draw the keyboard-focus / pressed ring in the accent.
+            v.widgets.inactive.bg_stroke = Stroke::new(1.0, c_line());
+            v.widgets.hovered.bg_stroke = Stroke::new(1.0, rgb(pal().hover_stroke));
+            v.widgets.active.bg_stroke = Stroke::new(1.5, c_accent());
+            v.selection.stroke = Stroke::new(1.5, c_accent());
+        }
         style.visuals = v;
         ctx.set_style(style);
-        self.logo = decode_png(LOGO_PNG, 220)
-            .map(|img| ctx.load_texture("logo", img, TextureOptions::LINEAR));
-        self.pwds = decode_png(PWDS_PNG, 400)
-            .map(|img| ctx.load_texture("pwds", img, TextureOptions::LINEAR));
+        if self.logo.is_none() {
+            self.logo = decode_png(LOGO_PNG, 220)
+                .map(|img| ctx.load_texture("logo", img, TextureOptions::LINEAR));
+            self.pwds = decode_png(PWDS_PNG, 400)
+                .map(|img| ctx.load_texture("pwds", img, TextureOptions::LINEAR));
+        }
+    }
+
+    /// Applies a new theme choice immediately and remembers it.
+    fn set_theme_pref(&mut self, pref: ThemePref) {
+        self.theme_pref = pref;
+        self.applied = None;
+        if !self.persist_theme {
+            return;
+        }
+        let Some(path) = self.settings_path.clone() else {
+            return;
+        };
+        let mut settings = Settings::load(&path);
+        settings.theme = pref;
+        match settings.save(&path) {
+            Ok(()) => self.info(Level::Info, format!("Theme: {}", pref.label())),
+            Err(e) => self.info(
+                Level::Warning,
+                format!("Theme applied, but it could not be saved for next time: {e}"),
+            ),
+        }
     }
 
     // ----- keyboard ------------------------------------------------------
@@ -758,7 +829,7 @@ impl App {
 
     fn top_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("top")
-            .frame(egui::Frame::none().fill(PANEL).inner_margin(egui::Margin::symmetric(12.0, 6.0)).stroke(Stroke::new(1.0, LINE)))
+            .frame(egui::Frame::none().fill(c_panel()).inner_margin(egui::Margin::symmetric(12.0, 6.0)).stroke(Stroke::new(1.0, c_line())))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let has = self.project().is_some();
@@ -771,6 +842,16 @@ impl App {
                                 self.view.needs_fit = true;
                             }
                             ui.checkbox(&mut self.show_fill, "Filled preview behind outline");
+                            ui.separator();
+                            ui.menu_button("Theme", |ui| {
+                                for pref in ThemePref::ALL {
+                                    let label = if pref == ThemePref::System { "System (follow Windows)" } else { pref.label() };
+                                    if ui.radio(self.theme_pref == pref, label).clicked() {
+                                        ui.close_menu();
+                                        self.set_theme_pref(pref);
+                                    }
+                                }
+                            });
                         });
                         ui.menu_button("Help", |ui| {
                             if ui.button("Keyboard shortcuts").clicked() {
@@ -793,8 +874,8 @@ impl App {
                             (Tool::Pen, "Pen  P", "Click to place points; click the first point or press Esc to close"),
                         ] {
                             let on = self.tool == tool;
-                            let b = egui::Button::new(RichText::new(label).color(if on { BG } else { TEXT }))
-                                .fill(if on { ACCENT } else { RAISED });
+                            let b = egui::Button::new(RichText::new(label).color(if on { c_tool_on() } else { c_text() }))
+                                .fill(if on { c_accent_fill() } else { c_raised() });
                             if ui.add(b).on_hover_text(tip).clicked() {
                                 if tool == Tool::Select {
                                     self.finish_pen();
@@ -830,7 +911,7 @@ impl App {
                             ui.separator();
                             let title = fontstrike::session::display_name(p.root());
                             let label = if dirty { format!("{title}  •  unsaved") } else { title };
-                            ui.add(egui::Label::new(RichText::new(label).color(if dirty { WARN } else { MUTED })).truncate())
+                            ui.add(egui::Label::new(RichText::new(label).color(if dirty { c_warn() } else { c_muted() })).truncate())
                                 .on_hover_text(p.root().display().to_string());
                         }
                     });
@@ -936,40 +1017,44 @@ impl App {
         egui::TopBottomPanel::bottom("status")
             .frame(
                 egui::Frame::none()
-                    .fill(PANEL)
+                    .fill(c_panel())
                     .inner_margin(egui::Margin::symmetric(14.0, 6.0))
-                    .stroke(Stroke::new(1.0, LINE)),
+                    .stroke(Stroke::new(1.0, c_line())),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let n = &self.session.notice;
                     let (color, mark) = match n.level {
-                        Level::Info => (MUTED, "•"),
-                        Level::Success => (SUCCESS, "✔"),
-                        Level::Warning => (WARN, "⚠"),
-                        Level::Error => (DANGER, "✖"),
+                        Level::Info => (c_muted(), "•"),
+                        Level::Success => (c_success(), "✔"),
+                        Level::Warning => (c_warn(), "⚠"),
+                        Level::Error => (c_danger(), "✖"),
                     };
                     ui.label(RichText::new(mark).color(color));
-                    let text_color = if n.level == Level::Info { TEXT } else { color };
+                    let text_color = if n.level == Level::Info {
+                        c_text()
+                    } else {
+                        color
+                    };
                     let text = n.text.clone();
                     ui.with_layout(egui::Layout::right_to_left(Align::Center), |ui| {
                         if let Some(p) = self.project() {
                             ui.label(
                                 RichText::new(format!("{} glyphs", p.glyph_names().len()))
                                     .small()
-                                    .color(MUTED),
+                                    .color(c_muted()),
                             );
                             ui.label(
                                 RichText::new(format!("{:.0}%", self.view.zoom * 100.0))
                                     .small()
-                                    .color(MUTED),
+                                    .color(c_muted()),
                             );
                             if let Some(c) = self.cursor_units {
                                 ui.label(
                                     RichText::new(format!("x {:.0}  y {:.0}", c.x, c.y))
                                         .monospace()
                                         .small()
-                                        .color(MUTED),
+                                        .color(c_muted()),
                                 );
                             }
                         }
@@ -996,7 +1081,7 @@ impl App {
             .resizable(true)
             .frame(
                 egui::Frame::none()
-                    .fill(PANEL)
+                    .fill(c_panel())
                     .inner_margin(egui::Margin::same(12.0)),
             )
             .show(ctx, |ui| {
@@ -1091,7 +1176,7 @@ impl App {
         let cov = raster::rasterize(&path, t, px, px);
         let tex = ctx.load_texture(
             format!("thumb-{name}"),
-            coverage_image(&cov, TEXT),
+            coverage_image(&cov, c_text()),
             TextureOptions::LINEAR,
         );
         let id = tex.id();
@@ -1123,19 +1208,19 @@ impl App {
         let painter = ui.painter_at(rect.expand(2.0));
         let box_rect = Rect::from_min_size(rect.min, vec2(size, size));
         let fill = if selected {
-            Color32::from_rgb(54, 45, 34)
+            rgb(pal().tile_selected)
         } else if response.hovered() {
-            RAISED
+            c_raised()
         } else {
-            Color32::from_rgb(31, 37, 43)
+            rgb(pal().tile)
         };
         painter.rect_filled(box_rect, 6.0, fill);
         let stroke = if response.has_focus() {
-            Stroke::new(2.0, SELECT)
+            Stroke::new(2.0, c_select())
         } else if selected {
-            Stroke::new(1.5, ACCENT)
+            Stroke::new(1.5, c_accent())
         } else {
-            Stroke::new(1.0, LINE)
+            Stroke::new(1.0, c_line())
         };
         painter.rect_stroke(box_rect, 6.0, stroke);
         if let Some(t) = tex {
@@ -1151,7 +1236,7 @@ impl App {
             Align2::CENTER_CENTER,
             truncate(name, 10),
             FontId::proportional(11.5),
-            if selected { ACCENT } else { MUTED },
+            if selected { c_accent() } else { c_muted() },
         );
         response.clicked()
     }
@@ -1181,7 +1266,7 @@ impl App {
             .resizable(true)
             .frame(
                 egui::Frame::none()
-                    .fill(PANEL)
+                    .fill(c_panel())
                     .inner_margin(egui::Margin::same(14.0)),
             )
             .show(ctx, |ui| {
@@ -1386,7 +1471,7 @@ impl App {
                         id.point + 1
                     ))
                     .small()
-                    .color(MUTED),
+                    .color(c_muted()),
                 );
                 egui::Grid::new("pt-grid")
                     .num_columns(4)
@@ -1681,7 +1766,7 @@ impl App {
                 }
                 for n in &notes {
                     ui.add(
-                        egui::Label::new(RichText::new(format!("⚠ {n}")).small().color(WARN))
+                        egui::Label::new(RichText::new(format!("⚠ {n}")).small().color(c_warn()))
                             .wrap(),
                     );
                 }
@@ -1689,7 +1774,8 @@ impl App {
                     ui.add_space(4.0);
                     ui.label(RichText::new("Last export").strong());
                     ui.add(
-                        egui::Label::new(RichText::new(r.summary()).small().color(SUCCESS)).wrap(),
+                        egui::Label::new(RichText::new(r.summary()).small().color(c_success()))
+                            .wrap(),
                     );
                     for n in &r.notes {
                         hint(ui, n);
@@ -1741,14 +1827,14 @@ impl App {
     fn canvas(&mut self, ui: &mut egui::Ui) {
         let (rect, response) = ui.allocate_exact_size(ui.available_size(), Sense::click_and_drag());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 0.0, CANVAS);
+        painter.rect_filled(rect, 0.0, c_canvas());
         let Some(name) = self.selected.clone() else {
             painter.text(
                 rect.center(),
                 Align2::CENTER_CENTER,
                 "Add a glyph to start drawing",
                 FontId::proportional(16.0),
-                MUTED,
+                c_muted(),
             );
             return;
         };
@@ -1806,14 +1892,14 @@ impl App {
         painter.rect_filled(
             Rect::from_min_max(pos2(x0, asc_y), pos2(xw.max(x0 + 1.0), desc_y)),
             0.0,
-            Color32::from_rgb(25, 30, 36),
+            rgb(pal().em_box),
         );
         for (units, label, color) in [
-            (m.ascender, "Ascender", GUIDE),
-            (m.cap_height, "Cap height", GUIDE),
-            (m.x_height, "x-height", GUIDE),
-            (0.0, "Baseline", ACCENT_DIM),
-            (m.descender, "Descender", GUIDE),
+            (m.ascender, "Ascender", c_guide()),
+            (m.cap_height, "Cap height", c_guide()),
+            (m.x_height, "x-height", c_guide()),
+            (0.0, "Baseline", c_accent_dim()),
+            (m.descender, "Descender", c_guide()),
         ] {
             let y = self.to_screen(Point::new(0.0, units)).y;
             painter.line_segment(
@@ -1825,13 +1911,13 @@ impl App {
                 Align2::LEFT_BOTTOM,
                 format!("{label}  {units:.0}"),
                 FontId::proportional(11.0),
-                MUTED,
+                c_muted(),
             );
         }
         for x in [x0, xw] {
             painter.line_segment(
                 [pos2(x, rect.min.y), pos2(x, rect.max.y)],
-                Stroke::new(1.0, GUIDE),
+                Stroke::new(1.0, c_guide()),
             );
         }
         painter.text(
@@ -1839,7 +1925,7 @@ impl App {
             Align2::LEFT_CENTER,
             format!("width {:.0}", glyph.width),
             FontId::monospace(11.0),
-            MUTED,
+            c_muted(),
         );
         if let Some(b) = outline::bounds(self.project().unwrap().font(), &glyph) {
             let y = rect.max.y - 30.0;
@@ -1848,14 +1934,14 @@ impl App {
                 Align2::CENTER_CENTER,
                 format!("{:.0}", b.x0),
                 FontId::monospace(11.0),
-                MUTED,
+                c_muted(),
             );
             painter.text(
                 pos2((xw + self.to_screen(Point::new(b.x1, 0.0)).x) / 2.0, y),
                 Align2::CENTER_CENTER,
                 format!("{:.0}", glyph.width - b.x1),
                 FontId::monospace(11.0),
-                MUTED,
+                c_muted(),
             );
         }
 
@@ -1886,7 +1972,7 @@ impl App {
                 let ox = ((self.view.origin.x - rect.min.x) * ppp) as f64;
                 let oy = ((self.view.origin.y - rect.min.y) * ppp) as f64;
                 let cov = raster::rasterize(&path, Affine::new([z, 0.0, 0.0, -z, ox, oy]), pw, ph);
-                let img = coverage_image(&cov, Color32::from_rgb(66, 78, 90));
+                let img = coverage_image(&cov, rgb(pal().glyph_fill));
                 match &mut self.canvas_fill {
                     Some((k, tex)) => {
                         tex.set(img, TextureOptions::LINEAR);
@@ -1912,12 +1998,12 @@ impl App {
         }
 
         if !comp_path.elements().is_empty() {
-            self.stroke_path(&painter, &comp_path, Stroke::new(1.4, COMPONENT));
+            self.stroke_path(&painter, &comp_path, Stroke::new(1.4, c_component()));
         }
         self.stroke_path(
             &painter,
             &outline::contours_path(&glyph),
-            Stroke::new(1.8, ACCENT),
+            Stroke::new(1.8, c_accent()),
         );
 
         // Points and handles.
@@ -1933,7 +2019,7 @@ impl App {
                         if q.typ != PointType::OffCurve {
                             painter.line_segment(
                                 [pos, self.to_screen(Point::new(q.x, q.y))],
-                                Stroke::new(1.0, MUTED.gamma_multiply(0.7)),
+                                Stroke::new(1.0, c_muted().gamma_multiply(0.7)),
                             );
                         }
                     }
@@ -1953,18 +2039,18 @@ impl App {
                 let sel = self.selection.contains(&id);
                 let hov = hover == Some(id);
                 let fill = if sel {
-                    SELECT
+                    c_select()
                 } else if hov {
-                    TEXT
+                    c_text()
                 } else {
-                    CANVAS
+                    c_canvas()
                 };
                 let color = if sel {
-                    SELECT
+                    c_select()
                 } else if pt.typ == PointType::OffCurve {
-                    MUTED
+                    c_muted()
                 } else {
-                    ACCENT
+                    c_accent()
                 };
                 let stroke = Stroke::new(if hov || sel { 2.0 } else { 1.5 }, color);
                 match pt.typ {
@@ -1984,7 +2070,11 @@ impl App {
                     }
                 }
                 if pi == 0 && contour.points.len() > 1 {
-                    painter.circle_stroke(pos, 8.5, Stroke::new(1.0, ACCENT.gamma_multiply(0.6)));
+                    painter.circle_stroke(
+                        pos,
+                        8.5,
+                        Stroke::new(1.0, c_accent().gamma_multiply(0.6)),
+                    );
                 }
             }
         }
@@ -1994,7 +2084,7 @@ impl App {
                 Align2::CENTER_CENTER,
                 "Empty glyph: draw with the Pen (P) or use Add shape in the inspector",
                 FontId::proportional(14.0),
-                MUTED,
+                c_muted(),
             );
         }
 
@@ -2017,7 +2107,7 @@ impl App {
             Tool::Select => self.select_tool(&response, &painter, &glyph, &hits, hover, shift),
             Tool::Pen => {
                 if let Some(hp) = response.hover_pos() {
-                    painter.circle_stroke(hp, 5.0, Stroke::new(1.0, ACCENT));
+                    painter.circle_stroke(hp, 5.0, Stroke::new(1.0, c_accent()));
                 }
                 if response.clicked()
                     && let Some(pos) = response.interact_pointer_pos()
@@ -2051,7 +2141,7 @@ impl App {
                 {
                     painter.line_segment(
                         [self.to_screen(Point::new(last.x, last.y)), hp],
-                        Stroke::new(1.0, ACCENT.gamma_multiply(0.5)),
+                        Stroke::new(1.0, c_accent().gamma_multiply(0.5)),
                     );
                 }
             }
@@ -2151,8 +2241,8 @@ impl App {
                     painter.rect(
                         r,
                         2.0,
-                        SELECT.gamma_multiply(0.08),
-                        Stroke::new(1.0, SELECT),
+                        c_select().gamma_multiply(0.08),
+                        Stroke::new(1.0, c_select()),
                     );
                     if stopped {
                         if !additive {
@@ -2242,7 +2332,7 @@ impl App {
         let height = avail.y.clamp(48.0, 160.0);
         let (rect, response) = ui.allocate_exact_size(vec2(avail.x, height), Sense::click());
         let painter = ui.painter_at(rect);
-        painter.rect_filled(rect, 6.0, Color32::from_rgb(238, 234, 226));
+        painter.rect_filled(rect, 6.0, rgb(pal().paper));
         let em = (m.ascender - m.descender).max(1.0);
         let scale = (height as f64 - 22.0) / em;
         let mut x = 16.0f64;
@@ -2292,7 +2382,7 @@ impl App {
             );
             if pw > 0 && ph > 0 {
                 let cov = raster::rasterize(&path, Affine::scale(ppp as f64), pw, ph);
-                let img = coverage_image(&cov, Color32::from_rgb(24, 22, 20));
+                let img = coverage_image(&cov, rgb(pal().ink));
                 match &mut self.preview_tex {
                     Some((k, tex)) => {
                         tex.set(img, TextureOptions::LINEAR);
@@ -2322,7 +2412,7 @@ impl App {
                     pos2(rect.min.x + *bx as f32, rect.max.y - 5.0),
                     pos2(rect.min.x + (*bx + *w) as f32, rect.max.y - 2.0),
                 );
-                painter.rect_filled(r, 1.0, Color32::from_rgb(196, 120, 40));
+                painter.rect_filled(r, 1.0, rgb(pal().paper_underline));
             }
         }
         for (kx, k) in kerns {
@@ -2331,7 +2421,7 @@ impl App {
                 Align2::CENTER_TOP,
                 format!("{k:+.0}"),
                 FontId::proportional(10.0),
-                Color32::from_rgb(150, 82, 20),
+                rgb(pal().paper_mark),
             );
         }
         let response = response.on_hover_text(
@@ -2361,8 +2451,7 @@ impl App {
         if let Some(pwds) = &self.pwds {
             let size = vec2(width, width * pwds.size()[1] as f32 / pwds.size()[0] as f32);
             let (rect, response) = ui.allocate_exact_size(size + vec2(16.0, 8.0), Sense::hover());
-            ui.painter()
-                .rect_filled(rect, 5.0, Color32::from_rgb(240, 238, 232));
+            ui.painter().rect_filled(rect, 5.0, rgb(pal().badge));
             ui.painter().image(
                 pwds.id(),
                 rect.shrink2(vec2(8.0, 4.0)),
@@ -2382,8 +2471,8 @@ impl App {
             .anchor(Align2::CENTER_CENTER, vec2(0.0, 0.0))
             .show(ctx, |ui| {
                 egui::Frame::none()
-                    .fill(PANEL)
-                    .stroke(Stroke::new(1.0, LINE))
+                    .fill(c_panel())
+                    .stroke(Stroke::new(1.0, c_line()))
                     .rounding(Rounding::same(14.0))
                     .inner_margin(egui::Margin::same(28.0))
                     .show(ui, |ui| {
@@ -2400,10 +2489,15 @@ impl App {
                                     });
                             }
                             ui.add_space(4.0);
-                            ui.label(RichText::new("FontStrike").size(28.0).strong().color(TEXT));
+                            ui.label(
+                                RichText::new("FontStrike")
+                                    .size(28.0)
+                                    .strong()
+                                    .color(c_text()),
+                            );
                             ui.label(
                                 RichText::new("Draw the shape of a letter, then keep it editable.")
-                                    .color(MUTED),
+                                    .color(c_muted()),
                             );
                             ui.add_space(16.0);
                             let w = card_w - 40.0;
@@ -2433,7 +2527,7 @@ impl App {
                             ui.add_space(12.0);
                             ui.separator();
                             ui.add_space(6.0);
-                            ui.label(RichText::new("A PWDS Strike app").small().color(MUTED));
+                            ui.label(RichText::new("A PWDS Strike app").small().color(c_muted()));
                             self.brand_badge(ui, 70.0);
                         });
                     });
@@ -2451,12 +2545,12 @@ impl App {
                     ui.add(egui::Image::new((logo.id(), vec2(84.0, 84.0)))).widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "FontStrike logo"));
                 }
                 ui.label(RichText::new("FontStrike").size(22.0).strong());
-                ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(MUTED));
+                ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(c_muted()));
                 ui.add_space(6.0);
                 ui.label("A desktop editor for UFO font sources: outlines, metrics, kerning, and verified TrueType export.");
                 ui.add_space(8.0);
                 self.brand_badge(ui, 110.0);
-                ui.label(RichText::new("Part of the PWDS Strike suite by ProWebDevSolutions").small().color(MUTED));
+                ui.label(RichText::new("Part of the PWDS Strike suite by ProWebDevSolutions").small().color(c_muted()));
             });
             ui.add_space(8.0);
             ui.label(RichText::new("Built with").strong());
@@ -2615,7 +2709,7 @@ impl App {
                     ui.label("Its kerning pairs and group memberships are removed too. Undo restores everything.");
                     ui.add_space(6.0);
                     ui.horizontal(|ui| {
-                        if ui.add(egui::Button::new(RichText::new("Delete").color(Color32::WHITE)).fill(Color32::from_rgb(170, 60, 52))).clicked() {
+                        if ui.add(egui::Button::new(RichText::new("Delete").color(rgb(pal().on_danger))).fill(rgb(pal().danger_fill))).clicked() {
                             if let Some(p) = self.session.project.as_mut() {
                                 let r = p.delete_glyph(name);
                                 if self.report(r).is_some() {
@@ -2753,17 +2847,17 @@ impl eframe::App for App {
                 .height_range(84.0..=240.0)
                 .frame(
                     egui::Frame::none()
-                        .fill(PANEL)
+                        .fill(c_panel())
                         .inner_margin(egui::Margin::symmetric(12.0, 8.0))
-                        .stroke(Stroke::new(1.0, LINE)),
+                        .stroke(Stroke::new(1.0, c_line())),
                 )
                 .show(ctx, |ui| self.preview(ui));
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().fill(CANVAS))
+                .frame(egui::Frame::none().fill(c_canvas()))
                 .show(ctx, |ui| self.canvas(ui));
         } else {
             egui::CentralPanel::default()
-                .frame(egui::Frame::none().fill(BG))
+                .frame(egui::Frame::none().fill(c_bg()))
                 .show(ctx, |_| {});
             self.splash(ctx);
         }
@@ -2785,6 +2879,17 @@ fn main() -> eframe::Result {
     };
     let capture = value("--capture").map(PathBuf::from);
     let select = value("--select");
+    let settings_path = value("--settings")
+        .map(PathBuf::from)
+        .or_else(Settings::default_path);
+    let theme_override = value("--theme").and_then(|t| ThemePref::parse(&t));
+    let theme_pref = theme_override.unwrap_or_else(|| {
+        settings_path
+            .as_deref()
+            .map(Settings::load)
+            .unwrap_or_default()
+            .theme
+    });
     let about = args.iter().any(|a| a == "--about");
     let point = value("--point").and_then(|s| {
         let (c, p) = s.split_once(':')?;
@@ -2836,6 +2941,10 @@ fn main() -> eframe::Result {
         Box::new(move |_cc| {
             let mut app = App::new(project, capture, select);
             app.about = about;
+            app.theme_pref = theme_pref;
+            app.settings_path = settings_path;
+            // A --theme override (used for captures) is not written to settings.
+            app.persist_theme = theme_override.is_none();
             app.selection.extend(point);
             Ok(Box::new(app))
         }),
