@@ -17,6 +17,7 @@ mod project;
 pub mod raster;
 pub mod session;
 pub mod storage;
+pub mod theme;
 
 pub use export::{ExportJob, ExportReport};
 pub use norad;
