@@ -1,19 +1,146 @@
-name: FontStrike UI review
+name: FontStrike CI
 
 on:
+  push:
+    branches: [main, fontstrike-cross-platform]
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
-  windows:
-    runs-on: windows-latest
-    timeout-minutes: 50
+  build-test:
+    name: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     env:
-      CARGO_BUILD_JOBS: '2'
       CARGO_INCREMENTAL: '0'
       CARGO_PROFILE_DEV_DEBUG: '0'
+      CARGO_TERM_COLOR: always
     steps:
       - uses: actions/checkout@v4
-      - name: Test font source and desktop code
+
+      - name: Install Linux system packages (eframe, rfd, headless capture)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libxkbcommon-dev libxkbcommon-x11-0 \
+            libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev \
+            libwayland-dev libgl1 libegl1 libgl1-mesa-dri \
+            xvfb
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Toolchain
+        run: |
+          rustc --version
+          cargo --version
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy
+        run: cargo clippy --locked --features desktop --all-targets -- -D warnings
+
+      - name: Test
+        shell: bash
+        env:
+          FONTSTRIKE_EXPORT_DIR: ${{ github.workspace }}/out/fonts
         run: cargo test --locked --features desktop
-      - name: Build native capture target
-        run: cargo build --locked --features desktop --bin fontstrike-desktop
+
+      - name: Build release desktop binary
+        run: cargo build --locked --release --features desktop --bin fontstrike-desktop
+
+      - name: Capture the running app (Linux, Xvfb + Mesa llvmpipe)
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: |
+          mkdir -p out/captures
+          for theme in dark light; do
+            timeout 120 xvfb-run -a -s "-screen 0 1600x1000x24" \
+              target/release/fontstrike-desktop --demo out/cap-$theme.ufo --select A \
+              --theme $theme --settings out/settings.ini \
+              --capture out/captures/linux-editor-$theme.png
+          done
+          ls -l out/captures
+
+      - name: Capture the running app (Windows, macOS; best effort on hosted runners)
+        if: runner.os != 'Linux'
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p out/captures
+          os=$(echo "${{ runner.os }}" | tr '[:upper:]' '[:lower:]')
+          for theme in dark light; do
+            target/release/fontstrike-desktop --demo out/cap-$theme.ufo --select A \
+              --theme $theme --settings out/settings.ini \
+              --capture out/captures/$os-editor-$theme.png &
+            pid=$!
+            for _ in $(seq 1 120); do kill -0 $pid 2>/dev/null || break; sleep 1; done
+            if kill -0 $pid 2>/dev/null; then kill $pid; echo "capture timed out"; exit 1; fi
+            wait $pid
+          done
+          ls -l out/captures
+
+      - name: Set up Python for font validators
+        if: runner.os == 'Linux'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Validate exported fonts with fontTools, ttx, and OpenType Sanitizer
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -o pipefail
+          python -m pip install --upgrade fonttools opentype-sanitizer
+          python -m pip show fonttools opentype-sanitizer | grep -E '^(Name|Version):'
+          cd out/fonts
+          ls -l
+          for f in FontStrikeTestSans RichFixture; do
+            ttx -q -o $f.ttx $f.ttf
+            ttx -q -o $f.roundtrip.ttf $f.ttx
+            ots-sanitize $f.roundtrip.ttf && echo "PASS  ots-sanitize on the ttx round-trip of $f.ttf"
+          done
+          python ../../tools/validate_fonttools.py FontStrikeTestSans.ttf \
+            "A V -80" "V A -70" "T o -60" 2>&1 | tee validation-FontStrikeTestSans.txt
+          python ../../tools/validate_fonttools.py RichFixture.ttf \
+            "A o -55" "Aacute o -40" 2>&1 | tee validation-RichFixture.txt
+
+      - name: Upload binary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fontstrike-desktop-${{ runner.os }}
+          path: |
+            target/release/fontstrike-desktop
+            target/release/fontstrike-desktop.exe
+          if-no-files-found: warn
+
+      - name: Upload captures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: captures-${{ runner.os }}
+          path: out/captures/
+          if-no-files-found: warn
+
+      - name: Upload exported test fonts and validator output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-fonts-${{ runner.os }}
+          path: out/fonts/
+          if-no-files-found: warn
