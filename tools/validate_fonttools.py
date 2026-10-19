@@ -10,7 +10,7 @@ adjustment. For every font this:
 1. loads it with fontTools.ttLib.TTFont and decompiles every table;
 2. round-trips it through TTX XML (saveXML -> importXML -> compile) and
    reloads the compiled result;
-3. runs ots-sanitize (OpenType Sanitizer, as used by Chrome and Firefox);
+3. runs ots-sanitize through `python -m ots` (the opentype-sanitizer wheel) (OpenType Sanitizer, as used by Chrome and Firefox);
 4. reads GPOS pair kerning with fontTools and compares with the expected
    values.
 
@@ -110,12 +110,12 @@ def main(argv):
     # OpenType Sanitizer.
     try:
         ots = subprocess.run(
-            ["ots-sanitize", path], capture_output=True, text=True, check=False
+            [sys.executable, "-m", "ots", path], capture_output=True, text=True, check=False
         )
         out = (ots.stdout + ots.stderr).strip()
-        check(ots.returncode == 0, f"ots-sanitize exit {ots.returncode}" + (f": {out}" if out else ""))
-    except FileNotFoundError:
-        check(False, "ots-sanitize not found (pip install opentype-sanitizer)")
+        check(ots.returncode == 0, f"ots-sanitize (python -m ots) exit {ots.returncode}" + (f": {out}" if out else ""))
+    except OSError as e:
+        check(False, f"could not run ots-sanitize via python -m ots: {e}")
 
     # GPOS kerning.
     pairs = gpos_pairs(font)
