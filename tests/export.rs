@@ -98,6 +98,16 @@ fn compiled_ttf_readback_preserves_glyph_outlines_advances_and_pair_kerning() {
     }
 }
 
+/// CI sets FONTSTRIKE_EXPORT_DIR to collect the exported test fonts for the
+/// independent validators (fontTools, OpenType Sanitizer) and as artifacts.
+fn keep_for_validation(ttf: &std::path::Path, name: &str) {
+    if let Some(dir) = std::env::var_os("FONTSTRIKE_EXPORT_DIR") {
+        let dir = std::path::PathBuf::from(dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::copy(ttf, dir.join(name)).unwrap();
+    }
+}
+
 #[test]
 fn synthetic_test_font_exports_curves_and_shaped_kerning() {
     let dir = common::scratch("export-demo");
@@ -105,6 +115,7 @@ fn synthetic_test_font_exports_curves_and_shaped_kerning() {
     let project = fontstrike::demo::build(&root).unwrap();
     let ttf = dir.join("Demo.ttf");
     let report = project.export_ttf(&ttf).unwrap();
+    keep_for_validation(&ttf, "FontStrikeTestSans.ttf");
     assert_eq!(report.mappings_checked, 7);
     assert_eq!(report.outlines_checked, 6);
     assert_eq!(report.kerning_pairs_checked, 3);
@@ -134,6 +145,7 @@ fn rich_external_source_with_groups_components_and_qcurves_exports() {
     let project = FontProject::open(&root).unwrap();
     let ttf = dir.join("Rich.ttf");
     let report = project.export_ttf(&ttf).unwrap();
+    keep_for_validation(&ttf, "RichFixture.ttf");
     assert!(report.kerning_pairs_checked >= 2, "{report:?}");
     let bytes = std::fs::read(&ttf).unwrap();
     let face = rustybuzz::Face::from_slice(&bytes, 0).unwrap();
