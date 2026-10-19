@@ -669,10 +669,10 @@ impl App {
         v.window_fill = c_raised();
         v.extreme_bg_color = rgb(pal().field);
         v.faint_bg_color = c_raised();
-        v.window_stroke = Stroke::new(1.0, c_line());
+        v.window_stroke = Stroke::new(1.0_f32, c_line());
         v.window_rounding = Rounding::same(10.0);
         v.selection.bg_fill = rgb(pal().selection_bg);
-        v.selection.stroke = Stroke::new(1.5, c_select());
+        v.selection.stroke = Stroke::new(1.5_f32, c_select());
         v.hyperlink_color = c_select();
         for w in [
             &mut v.widgets.inactive,
@@ -682,23 +682,23 @@ impl App {
         ] {
             w.rounding = Rounding::same(6.0);
         }
-        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0, c_line());
-        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0, c_text());
+        v.widgets.noninteractive.bg_stroke = Stroke::new(1.0_f32, c_line());
+        v.widgets.noninteractive.fg_stroke = Stroke::new(1.0_f32, c_text());
         v.widgets.inactive.bg_fill = c_raised();
         v.widgets.inactive.weak_bg_fill = c_raised();
-        v.widgets.inactive.fg_stroke = Stroke::new(1.0, c_text());
+        v.widgets.inactive.fg_stroke = Stroke::new(1.0_f32, c_text());
         v.widgets.hovered.bg_fill = rgb(pal().hovered);
         v.widgets.hovered.weak_bg_fill = rgb(pal().hovered);
-        v.widgets.hovered.bg_stroke = Stroke::new(1.0, rgb(pal().hover_stroke));
+        v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, rgb(pal().hover_stroke));
         v.widgets.active.bg_fill = rgb(pal().pressed);
         v.widgets.active.weak_bg_fill = rgb(pal().pressed);
         if light {
             // Outline inputs and buttons so they stay distinct on pale panels,
             // and draw the keyboard-focus / pressed ring in the accent.
-            v.widgets.inactive.bg_stroke = Stroke::new(1.0, c_line());
-            v.widgets.hovered.bg_stroke = Stroke::new(1.0, rgb(pal().hover_stroke));
-            v.widgets.active.bg_stroke = Stroke::new(1.5, c_accent());
-            v.selection.stroke = Stroke::new(1.5, c_accent());
+            v.widgets.inactive.bg_stroke = Stroke::new(1.0_f32, c_line());
+            v.widgets.hovered.bg_stroke = Stroke::new(1.0_f32, rgb(pal().hover_stroke));
+            v.widgets.active.bg_stroke = Stroke::new(1.5_f32, c_accent());
+            v.selection.stroke = Stroke::new(1.5_f32, c_accent());
         }
         style.visuals = v;
         ctx.set_style(style);
@@ -870,7 +870,7 @@ impl App {
 
     fn top_bar(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::top("top")
-            .frame(egui::Frame::none().fill(c_panel()).inner_margin(egui::Margin::symmetric(12.0, 6.0)).stroke(Stroke::new(1.0, c_line())))
+            .frame(egui::Frame::none().fill(c_panel()).inner_margin(egui::Margin::symmetric(12.0, 6.0)).stroke(Stroke::new(1.0_f32, c_line())))
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     let has = self.project().is_some();
@@ -1063,7 +1063,7 @@ impl App {
                 egui::Frame::none()
                     .fill(c_panel())
                     .inner_margin(egui::Margin::symmetric(14.0, 6.0))
-                    .stroke(Stroke::new(1.0, c_line())),
+                    .stroke(Stroke::new(1.0_f32, c_line())),
             )
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -1260,11 +1260,11 @@ impl App {
         };
         painter.rect_filled(box_rect, 6.0, fill);
         let stroke = if response.has_focus() {
-            Stroke::new(2.0, c_select())
+            Stroke::new(2.0_f32, c_select())
         } else if selected {
-            Stroke::new(1.5, c_accent())
+            Stroke::new(1.5_f32, c_accent())
         } else {
-            Stroke::new(1.0, c_line())
+            Stroke::new(1.0_f32, c_line())
         };
         painter.rect_stroke(box_rect, 6.0, stroke);
         if let Some(t) = tex {
@@ -1948,7 +1948,7 @@ impl App {
             let y = self.to_screen(Point::new(0.0, units)).y;
             painter.line_segment(
                 [pos2(rect.min.x, y), pos2(rect.max.x, y)],
-                Stroke::new(1.0, color),
+                Stroke::new(1.0_f32, color),
             );
             painter.text(
                 pos2(rect.min.x + 12.0, y - 3.0),
@@ -1961,7 +1961,7 @@ impl App {
         for x in [x0, xw] {
             painter.line_segment(
                 [pos2(x, rect.min.y), pos2(x, rect.max.y)],
-                Stroke::new(1.0, c_guide()),
+                Stroke::new(1.0_f32, c_guide()),
             );
         }
         painter.text(
@@ -2042,12 +2042,12 @@ impl App {
         }
 
         if !comp_path.elements().is_empty() {
-            self.stroke_path(&painter, &comp_path, Stroke::new(1.4, c_component()));
+            self.stroke_path(&painter, &comp_path, Stroke::new(1.4_f32, c_component()));
         }
         self.stroke_path(
             &painter,
             &outline::contours_path(&glyph),
-            Stroke::new(1.8, c_accent()),
+            Stroke::new(1.8_f32, c_accent()),
         );
 
         // Points and handles.
@@ -2063,7 +2063,7 @@ impl App {
                         if q.typ != PointType::OffCurve {
                             painter.line_segment(
                                 [pos, self.to_screen(Point::new(q.x, q.y))],
-                                Stroke::new(1.0, c_muted().gamma_multiply(0.7)),
+                                Stroke::new(1.0_f32, c_muted().gamma_multiply(0.7)),
                             );
                         }
                     }
@@ -2096,7 +2096,7 @@ impl App {
                 } else {
                     c_accent()
                 };
-                let stroke = Stroke::new(if hov || sel { 2.0 } else { 1.5 }, color);
+                let stroke = Stroke::new(if hov || sel { 2.0 } else { 1.5_f32 }, color);
                 match pt.typ {
                     PointType::OffCurve => {
                         painter.circle(pos, 3.5, fill, stroke);
@@ -2117,7 +2117,7 @@ impl App {
                     painter.circle_stroke(
                         pos,
                         8.5,
-                        Stroke::new(1.0, c_accent().gamma_multiply(0.6)),
+                        Stroke::new(1.0_f32, c_accent().gamma_multiply(0.6)),
                     );
                 }
             }
@@ -2151,7 +2151,7 @@ impl App {
             Tool::Select => self.select_tool(&response, &painter, &glyph, &hits, hover, shift),
             Tool::Pen => {
                 if let Some(hp) = response.hover_pos() {
-                    painter.circle_stroke(hp, 5.0, Stroke::new(1.0, c_accent()));
+                    painter.circle_stroke(hp, 5.0, Stroke::new(1.0_f32, c_accent()));
                 }
                 if response.clicked()
                     && let Some(pos) = response.interact_pointer_pos()
@@ -2185,7 +2185,7 @@ impl App {
                 {
                     painter.line_segment(
                         [self.to_screen(Point::new(last.x, last.y)), hp],
-                        Stroke::new(1.0, c_accent().gamma_multiply(0.5)),
+                        Stroke::new(1.0_f32, c_accent().gamma_multiply(0.5)),
                     );
                 }
             }
@@ -2286,7 +2286,7 @@ impl App {
                         r,
                         2.0,
                         c_select().gamma_multiply(0.08),
-                        Stroke::new(1.0, c_select()),
+                        Stroke::new(1.0_f32, c_select()),
                     );
                     if stopped {
                         if !additive {
@@ -2516,7 +2516,7 @@ impl App {
             .show(ctx, |ui| {
                 egui::Frame::none()
                     .fill(c_panel())
-                    .stroke(Stroke::new(1.0, c_line()))
+                    .stroke(Stroke::new(1.0_f32, c_line()))
                     .rounding(Rounding::same(14.0))
                     .inner_margin(egui::Margin::same(28.0))
                     .show(ui, |ui| {
@@ -2894,7 +2894,7 @@ impl eframe::App for App {
                     egui::Frame::none()
                         .fill(c_panel())
                         .inner_margin(egui::Margin::symmetric(12.0, 8.0))
-                        .stroke(Stroke::new(1.0, c_line())),
+                        .stroke(Stroke::new(1.0_f32, c_line())),
                 )
                 .show(ctx, |ui| self.preview(ui));
             egui::CentralPanel::default()
