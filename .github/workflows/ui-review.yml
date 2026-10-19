@@ -114,7 +114,8 @@ jobs:
           for f in FontStrikeTestSans RichFixture; do
             ttx -q -o $f.ttx $f.ttf
             ttx -q -o $f.roundtrip.ttf $f.ttx
-            ots-sanitize $f.roundtrip.ttf && echo "PASS  ots-sanitize on the ttx round-trip of $f.ttf"
+            python -m ots $f.roundtrip.ttf
+            echo "PASS  ots-sanitize (python -m ots) on the ttx round-trip of $f.ttf"
           done
           python ../../tools/validate_fonttools.py FontStrikeTestSans.ttf \
             "A V -80" "V A -70" "T o -60" 2>&1 | tee validation-FontStrikeTestSans.txt
