@@ -136,19 +136,24 @@ The CLI also has `new`, `rect`, `width`, `kern`, `status`, and `recover`. See
 
 ## Platforms
 
-Only a platform that CI builds **and** tests counts as supported. Status as of
-2026-10-18:
+A platform counts as supported only if CI builds **and** tests it. Status as of 2026-10-19,
+from [CI run 39197467448](https://github.com/Gerbzz/FontStrike/actions/runs/39197467448)
+(commit 696e830, stable rustc 1.99.1):
 
-| Platform | Status | Evidence |
-| --- | --- | --- |
-| Windows (x86-64) | **Supported.** `cargo test --locked --features desktop` (all suites, including `tests/portability.rs`) and a desktop build pass in CI on `windows-latest`. | [CI run 39163416721](https://github.com/Gerbzz/FontStrike/actions/runs/39163416721) (commit 027483e). Also built, tested, and captured by hand on Windows 11. |
-| Linux (x86-64) | **Not yet built or tested anywhere.** The code paths are portable and the CI job is written, but it has not run. | Waiting on the three-OS workflow (needs the GitHub `workflow` token scope to push). |
-| macOS | **Not yet built or tested anywhere.** Same as Linux. | Same as Linux. |
+| Platform (CI runner) | Status | fmt, clippy `-D warnings` | `cargo test --locked --features desktop` | Release desktop binary | `--capture` of the running app |
+| --- | --- | --- | --- | --- | --- |
+| Windows x86-64 (`windows-latest`) | **Supported** (CI-built and tested) | pass | 61 passed, 0 failed (14 suites) | built | **not possible on the hosted runner**: it has no OpenGL 2.0 (`egui_glow requires opengl 2.0+`) |
+| Linux x86-64 (`ubuntu-latest`, X11 via Xvfb) | **Supported** (CI-built and tested) | pass | 61 passed, 0 failed (14 suites) | built | dark and light frames captured under `xvfb-run` with Mesa llvmpipe |
+| macOS arm64 (`macos-latest`) | **Supported** (CI-built and tested) | pass | 61 passed, 0 failed (14 suites) | built | dark and light frames captured |
 
-The three-OS workflow runs fmt, clippy (`-D warnings`), the tests, and a release build on
-`windows-latest`, `ubuntu-latest`, and `macos-latest`. It also captures the app (under
-`xvfb-run` on Linux) and validates the exported fonts with fontTools and OpenType Sanitizer.
-This table will be updated with its run links once it runs.
+No platform has been **hands-on tested** by a person in this round. The Windows build was
+also built, tested, and captured from the command line on a Windows 11 PC (no interactive
+use). On Linux and macOS, the menus, file dialogs (XDG portal on Linux), Cmd+Q, and theme
+following have only been compiled and unit-tested, not clicked through. Wayland, Intel
+macOS, and ARM Linux are not in CI. The exported test fonts also pass fontTools, a `ttx`
+round trip, and OpenType Sanitizer on the Linux runner
+([docs/VALIDATION.md](docs/VALIDATION.md)). Each run uploads the binaries, captures, and
+exported fonts as artifacts (`fontstrike-desktop-<OS>`, `captures-<OS>`, `test-fonts-<OS>`).
 
 ### Prerequisites
 
@@ -200,7 +205,7 @@ but there is no installer and it has not been used on a large production font.
 | Spacing | Width, side bearings, glyph and group kerning | Kerning group editing, kerning class view, metrics keys |
 | Sources | UFO 2/3, lossless round trip, recovery, autosave | Designspace / multiple masters, `.ufoz` |
 | Export | Static TTF via fontc with independent checks | OTF/CFF, WOFF2, variable fonts, hinting |
-| Validation | ttf-parser, rustybuzz, fontkit, opentype.js | fontTools ttx round trip and OTS (CI step written, not yet run; see docs/VALIDATION.md) |
+| Validation | ttf-parser, rustybuzz, fontkit, opentype.js, fontTools + ttx, OTS | Validation on real-world fonts (fontTools, ttx, OTS run on the test fonts in CI) |
 | UI | Responsive panels, shortcuts, AccessKit, Dark/Light/System themes | Narrator walkthrough, Windows high-contrast mode, localisation |
 
 Known limits:
