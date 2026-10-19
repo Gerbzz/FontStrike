@@ -53,16 +53,18 @@ jobs:
         run: cargo clippy --locked --features desktop --all-targets -- -D warnings
 
       - name: Test
+        if: ${{ !cancelled() }}
         shell: bash
         env:
           FONTSTRIKE_EXPORT_DIR: ${{ github.workspace }}/out/fonts
         run: cargo test --locked --features desktop
 
       - name: Build release desktop binary
+        if: ${{ !cancelled() }}
         run: cargo build --locked --release --features desktop --bin fontstrike-desktop
 
       - name: Capture the running app (Linux, Xvfb + Mesa llvmpipe)
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         shell: bash
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
@@ -77,7 +79,7 @@ jobs:
           ls -l out/captures
 
       - name: Capture the running app (Windows, macOS; best effort on hosted runners)
-        if: runner.os != 'Linux'
+        if: ${{ !cancelled() && runner.os != 'Linux' }}
         continue-on-error: true
         shell: bash
         run: |
@@ -95,13 +97,13 @@ jobs:
           ls -l out/captures
 
       - name: Set up Python for font validators
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
 
       - name: Validate exported fonts with fontTools, ttx, and OpenType Sanitizer
-        if: runner.os == 'Linux'
+        if: ${{ !cancelled() && runner.os == 'Linux' }}
         shell: bash
         run: |
           set -o pipefail
