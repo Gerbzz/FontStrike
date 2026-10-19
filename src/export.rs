@@ -113,12 +113,10 @@ impl ExportJob {
 
     /// Compiles to bytes without writing the destination.
     pub fn compile(&self) -> Result<Vec<u8>> {
-        for required in [".notdef"] {
-            if self.font.default_layer().get_glyph(required).is_none() {
-                return Err(Error::new(format!(
-                    "add a {required} glyph before exporting (fonts must start with it)"
-                )));
-            }
+        if self.font.default_layer().get_glyph(".notdef").is_none() {
+            return Err(Error::new(
+                "add a .notdef glyph before exporting (fonts must start with it)",
+            ));
         }
         let temp = std::env::temp_dir().join(format!("{}.ufo", unique("fontstrike-export")));
         let result = (|| {
