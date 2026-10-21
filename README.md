@@ -145,7 +145,7 @@ Known limits:
   copy the whole font; fonts with thousands of glyphs have not been profiled.
 - Export compiles in the background; saving runs on the UI thread.
 - Pointer interaction with the built window was **not** exercised by an automated agent for
-  this release (desktop control was declined). Editing behaviour is covered by the library
+  this source checkpoint (desktop control was declined). Editing behaviour is covered by the library
   tests, and the screenshots are real rendered frames, not interaction recordings.
 
 ## Screenshots
