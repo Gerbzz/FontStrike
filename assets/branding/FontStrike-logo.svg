@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+<title id="title">FontStrike product mark</title>
+<desc id="desc">An explicit geometric F with a small square Bézier node on the middle arm. Original two-color vector artwork. Transparent background.</desc>
+<path fill="#EB6B0C" d="M112 104h72v304h-72zM184 236h124v68H184z"/>
+<path fill="#FFB81C" d="M184 104h216v72H184z"/>
+<path fill="#EB6B0C" d="M302 260h42v20h-42z"/>
+<path fill="#FFB81C" fill-rule="evenodd" d="M344 238h64v64h-64zM362 256v28h28v-28z"/>
+</svg>
