@@ -6,6 +6,8 @@ description = "Desktop UFO font editor: glyph outlines, metrics, kerning, and va
 
 [features]
 desktop = ["dep:eframe", "dep:rfd", "dep:png"]
+# Opt-in native X11 platform support; the glow renderer and Windows feature stay unchanged.
+desktop-x11 = ["desktop", "eframe/x11"]
 
 [[bin]]
 name = "fontstrike-desktop"

@@ -32,7 +32,7 @@ const WARN: Color32 = Color32::from_rgb(246, 204, 104);
 const DANGER: Color32 = Color32::from_rgb(255, 128, 118);
 const COMPONENT: Color32 = Color32::from_rgb(132, 160, 214);
 
-const LOGO_PNG: &[u8] = include_bytes!("../../assets/branding/FontStrike.png");
+const LOGO_PNG: &[u8] = include_bytes!("../../assets/branding/FontStrike-logo.png");
 const PWDS_PNG: &[u8] = include_bytes!("../../assets/branding/PWDS-logo.png");
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -2395,7 +2395,7 @@ impl App {
                                         egui::WidgetInfo::labeled(
                                             egui::WidgetType::Label,
                                             true,
-                                            "FontStrike woodpecker logo",
+                                            "FontStrike product logo",
                                         )
                                     });
                             }
@@ -2448,7 +2448,7 @@ impl App {
             ui.set_width(420.0);
             ui.vertical_centered(|ui| {
                 if let Some(logo) = &self.logo {
-                    ui.add(egui::Image::new((logo.id(), vec2(84.0, 84.0)))).widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "FontStrike logo"));
+                    ui.add(egui::Image::new((logo.id(), vec2(84.0, 84.0)))).widget_info(|| egui::WidgetInfo::labeled(egui::WidgetType::Label, true, "FontStrike product logo"));
                 }
                 ui.label(RichText::new("FontStrike").size(22.0).strong());
                 ui.label(RichText::new(format!("Version {}", env!("CARGO_PKG_VERSION"))).color(MUTED));

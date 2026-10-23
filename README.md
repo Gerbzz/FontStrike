@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/branding/FontStrike.png" alt="FontStrike woodpecker logo" width="128" height="128">
+  <img src="assets/branding/FontStrike-logo.png" alt="FontStrike product logo" width="128" height="128">
 </p>
 
 <h1 align="center">FontStrike</h1>
@@ -177,3 +177,7 @@ saves the window's own framebuffer) using the synthetic test font. No mockups.
 FontStrike is part of the PWDS Strike suite by
 [ProWebDevSolutions](https://prowebdevsolutions.com). See the other
 [Strike repositories](https://github.com/Gerbzz?tab=repositories&q=Strike).
+
+## Product artwork
+
+The FontStrike product mark above has an original [SVG master](assets/branding/FontStrike-logo.svg) and matching PNG. [Asset provenance](assets/branding/FontStrike-logo.provenance.json) records how it was created and the exact file hashes. The PWDS publisher artwork and inherited software credits are unchanged. Existing screenshots retain the artwork visible in their original captured builds.
