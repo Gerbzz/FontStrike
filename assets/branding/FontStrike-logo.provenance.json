@@ -3,10 +3,10 @@
   "created_utc": "2026-10-23",
   "source": "Original SVG artwork created for this application at the user's request.",
   "method": "Original manually authored SVG paths/polygons; geometry-only, two solid colors; no gradients, shadows, text, animal, embedded bitmap, stock artwork, or external references.",
-  "description": "An explicit geometric F with a small square B\u00e9zier node on the middle arm.",
+  "description": "An explicit geometric F with a small square Bézier node on the middle arm.",
   "renderer": "Inkscape 1.4 (e7c3feb100, 2024-10-09), native SVG export at 1024 x 1024 pixels, transparent background opacity 0; no raster image editing.",
   "license": "No additional licence grant stated",
-  "scope": "Product artwork in the README. Existing publisher marks, screenshots, runtime artwork, and packaged icons remain unchanged.",
+  "scope": "Product artwork in the README and native FontStrike startup card, About dialog, and window icon. All native surfaces share assets/branding/FontStrike-logo.png. The legacy FontStrike.png remains preserved for original asset history and original screenshots; PWDS publisher artwork, licence terms, and packaged icons are unchanged.",
   "assets": {
     "svg": {
       "path": "assets/branding/FontStrike-logo.svg",

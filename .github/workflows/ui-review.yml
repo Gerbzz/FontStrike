@@ -13,7 +13,112 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: '0'
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
       - name: Test font source and desktop code
         run: cargo test --locked --features desktop
       - name: Build native capture target
         run: cargo build --locked --features desktop --bin fontstrike-desktop
+
+      - name: Capture real native frames using the synthetic test font
+        shell: pwsh
+        env:
+          FONTSTRIKE_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = (git rev-parse HEAD).Trim()
+          if ($head -ne $env:FONTSTRIKE_EXPECTED_HEAD) { throw 'Capture checkout differs from the requested source head' }
+          $folder = Join-Path $env:RUNNER_TEMP 'fontstrike-native'
+          New-Item -ItemType Directory -Force -Path $folder | Out-Null
+          $demo = Join-Path $folder 'FontStrikeTestSans.ufo'
+          $app = Join-Path $env:GITHUB_WORKSPACE 'target/debug/fontstrike-desktop.exe'
+          Add-Type -AssemblyName System.Drawing
+          $cases = @(
+            [pscustomobject]@{ Name = 'splash'; Size = '1280x800'; Args = @() }
+            [pscustomobject]@{ Name = 'editor-A'; Size = '1280x800'; Args = @('--demo', $demo, '--select', 'A') }
+            [pscustomobject]@{ Name = 'editor-o-point-selected'; Size = '1280x800'; Args = @('--project', $demo, '--select', 'o', '--point', '0:0') }
+            [pscustomobject]@{ Name = 'about'; Size = '1280x800'; Args = @('--about') }
+            [pscustomobject]@{ Name = 'editor-narrow-1000x680'; Size = '1000x680'; Args = @('--project', $demo, '--select', 'V') }
+          )
+          $images = @()
+          foreach ($case in $cases) {
+            $png = Join-Path $folder "$($case.Name).png"
+            $start = [System.Diagnostics.ProcessStartInfo]::new($app)
+            $start.UseShellExecute = $false
+            $start.RedirectStandardOutput = $true
+            $start.RedirectStandardError = $true
+            foreach ($argument in (@('--size', $case.Size, '--capture', $png) + $case.Args)) {
+              $start.ArgumentList.Add([string]$argument)
+            }
+            $process = [System.Diagnostics.Process]::Start($start)
+            if ($null -eq $process) { throw "Could not start native capture: $($case.Name)" }
+            $stdout = $process.StandardOutput.ReadToEndAsync()
+            $stderr = $process.StandardError.ReadToEndAsync()
+            $timedOut = !$process.WaitForExit(45000)
+            if ($timedOut) { $process.Kill($true); $process.WaitForExit() }
+            $outText = $stdout.GetAwaiter().GetResult()
+            $errText = $stderr.GetAwaiter().GetResult()
+            $outText | Set-Content -LiteralPath (Join-Path $folder "$($case.Name)-stdout.txt")
+            $errText | Set-Content -LiteralPath (Join-Path $folder "$($case.Name)-stderr.txt")
+            $exitCode = $process.ExitCode
+            $process.Dispose()
+            if ($timedOut -or $exitCode -ne 0) { throw "Native capture failed: $($case.Name), timeout=$timedOut, exit=$exitCode. $errText" }
+            if ($errText -match 'Test font:|Open font:|Capture failed:') { throw "Native app reported an error: $errText" }
+            if (!(Test-Path -LiteralPath $png)) { throw "Native capture did not create $png" }
+            $file = Get-Item -LiteralPath $png
+            if ($file.Length -lt 10000 -or $file.Length -gt 5MB) { throw "Unexpected native PNG size: $($file.Length)" }
+            $bitmap = [System.Drawing.Bitmap]::new($png)
+            try {
+              if ($bitmap.Width -lt 900 -or $bitmap.Height -lt 600) { throw 'Native frame is below the documented minimum size' }
+              $colors = [System.Collections.Generic.HashSet[int]]::new()
+              $minimum = 255
+              $maximum = 0
+              $stepX = [Math]::Max(1, [int]($bitmap.Width / 64))
+              $stepY = [Math]::Max(1, [int]($bitmap.Height / 64))
+              for ($y = 0; $y -lt $bitmap.Height; $y += $stepY) {
+                for ($x = 0; $x -lt $bitmap.Width; $x += $stepX) {
+                  $pixel = $bitmap.GetPixel($x, $y)
+                  $null = $colors.Add($pixel.ToArgb())
+                  $value = [int](($pixel.R + $pixel.G + $pixel.B) / 3)
+                  $minimum = [Math]::Min($minimum, $value)
+                  $maximum = [Math]::Max($maximum, $value)
+                }
+              }
+              if ($colors.Count -lt 32 -or ($maximum - $minimum) -lt 40) { throw 'Native frame lacks rendered image detail' }
+              $images += [ordered]@{
+                file = $file.Name
+                bytes = $file.Length
+                width = $bitmap.Width
+                height = $bitmap.Height
+                sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $png).Hash.ToLowerInvariant()
+                sampled_colors = $colors.Count
+              }
+            } finally { $bitmap.Dispose() }
+          }
+          if (!(Test-Path -LiteralPath (Join-Path $demo 'metainfo.plist'))) { throw 'The synthetic test font was not created' }
+          if (@($images.sha256 | Select-Object -Unique).Count -ne $cases.Count) { throw 'Expected distinct native views, but two screenshots are identical' }
+          [ordered]@{
+            repository = $env:GITHUB_REPOSITORY
+            source_head = $head
+            run_id = $env:GITHUB_RUN_ID
+            run_attempt = $env:GITHUB_RUN_ATTEMPT
+            captured_at_utc = [DateTime]::UtcNow.ToString('o')
+            method = 'Running fontstrike-desktop --capture; egui native-window Screenshot event; no mockups or compositing'
+            fixture = 'Synthetic test font generated by src/demo.rs; no user font or device opened'
+            images = $images
+          } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $folder 'provenance.json')
+          git diff --exit-code -- Cargo.lock
+          if ($LASTEXITCODE -ne 0) { throw 'Cargo.lock changed during capture' }
+      - name: Preserve bounded native screenshot evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fontstrike-native-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/fontstrike-native/*.png
+            ${{ runner.temp }}/fontstrike-native/*-stdout.txt
+            ${{ runner.temp }}/fontstrike-native/*-stderr.txt
+            ${{ runner.temp }}/fontstrike-native/provenance.json
+          retention-days: 7
+          if-no-files-found: warn
