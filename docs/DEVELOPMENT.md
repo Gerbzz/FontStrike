@@ -90,6 +90,26 @@ Screenshots in `docs/screenshots/` are produced with `--capture`, which saves th
 egui rendered for the real window. Export validation commands and recorded output are in
 [VALIDATION.md](VALIDATION.md); `tools/validate-export.cjs` is the Node.js script used.
 
+### Linux CI native-window capture
+
+The opt-in `desktop-x11` feature adds eframe's official X11 platform support to the
+existing `desktop` feature. It keeps the same glow/OpenGL renderer, native event loop and
+`--capture` screenshot event; there is no offscreen/headless UI substitute. The default
+Windows feature, app source, product logo, and publisher assets are unchanged.
+
+The Linux CI job runs all source/desktop tests, builds with `--locked --features desktop-x11`,
+and launches the actual editor under Xvfb with Mesa llvmpipe. `glxinfo -B`, per-view logs
+and exact source/image hashes accompany the five native PNGs. The validator rejects
+missing, duplicate, stale, blank or undersized frames. Pillow only decodes/verifies the
+app-produced PNGs; it never generates or edits captured pixels. Its temporary unit-test
+fixtures are not application screenshots and are never uploaded.
+
+The hosted Windows capture attempt at source `f9af889962cf53c992bdb861bc776f8681898dfe`
+(run 40020031567) failed because that runner could not provide OpenGL 2.0. Its font
+source tests, branding tests and native build passed, but it produced no PNG. The
+Windows job and strict failure remain intact; Linux evidence must never be labelled
+Windows GUI acceptance. This CI route is not a general Linux packaging/support claim.
+
 ## Source terms
 
 No first-party licence grant is stated for this app in this checkout. `THIRD_PARTY.md`

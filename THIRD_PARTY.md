@@ -21,3 +21,17 @@ The native Windows preview adds registry crates `eframe 0.30.0` (MIT OR Apache-2
 - **Validation-only tools, not dependencies and not distributed:** fontkit 2.0.4 (MIT, https://github.com/foliojs/fontkit) and opentype.js 1.3.4 (MIT, https://github.com/opentypejs/opentype.js) were installed in a scratch folder to check exports independently (see `docs/VALIDATION.md`). `tools/validate-export.cjs` is original to this repository.
 - **Presentation references:** the README layout was informed by https://github.com/storytold/photocraft and https://getartcraft.com/. No text, code, images, or other assets were copied from either.
 - **Screenshots** in `docs/screenshots/` show the original FontStrike logo, the official PWDS logo (`assets/branding/PWDS-logo.png`), and the synthetic test font defined in `src/demo.rs`. The interface uses egui's bundled default fonts (Ubuntu Light, Hack, emoji/icon fonts; licences ship with egui/epaint).
+
+## Opt-in Linux X11 native-capture support
+
+The `desktop-x11` feature enables the existing eframe 0.30.0 X11 platform path without
+changing the glow renderer. The newly active Linux transitive crates are
+`as-raw-xcb-connection 1.0.1` (MIT OR Apache-2.0,
+https://github.com/psychon/as-raw-xcb-connection), `glutin_glx_sys 0.6.1` (Apache-2.0,
+https://github.com/rust-windowing/glutin), and `x11-dl 2.21.0` (MIT,
+https://github.com/AltF02/x11-rs). All existing locked versions/checksums are preserved.
+Cargo also records optional transitive resolution entries in Cargo.lock; those entries
+do not enable eframe's wgpu renderer. The active Linux dependency tree selects
+accesskit/default_fonts/glow/x11. No first-party or artwork licence grant changes.
+CI-only Xvfb/Mesa/Pillow tools are not bundled or distributed by this source patch;
+a future binary distribution still needs the exact notice audit described above.

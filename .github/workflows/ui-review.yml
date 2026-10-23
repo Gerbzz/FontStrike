@@ -122,3 +122,89 @@ jobs:
             ${{ runner.temp }}/fontstrike-native/provenance.json
           retention-days: 7
           if-no-files-found: warn
+
+
+  linux-native:
+    name: Linux X11 native frames (unchanged glow renderer)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      CARGO_BUILD_JOBS: '2'
+      CARGO_INCREMENTAL: '0'
+      CARGO_PROFILE_DEV_DEBUG: '0'
+      LIBGL_ALWAYS_SOFTWARE: '1'
+      GALLIUM_DRIVER: llvmpipe
+      WINIT_UNIX_BACKEND: x11
+      WINIT_X11_SCALE_FACTOR: '1'
+      FONTSTRIKE_EXPECTED_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Verify exact source and install native X11/Mesa runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$FONTSTRIKE_EXPECTED_HEAD"
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            xvfb xauth mesa-utils libgl1-mesa-dri libglx-mesa0 libegl1 \
+            libx11-dev libxkbcommon-dev libxkbcommon-x11-0 libwayland-dev \
+            pkg-config python3-pil
+          rustup toolchain install 1.99.1 --profile minimal
+          rustc +1.99.1 --version
+          cargo +1.99.1 --version
+      - name: Verify locked native platform graph
+        shell: bash
+        run: |
+          set -euo pipefail
+          cargo +1.99.1 metadata --locked --features desktop-x11 --format-version 1 > /dev/null
+          folder="$RUNNER_TEMP/fontstrike-linux-native"
+          mkdir -p "$folder"
+          cargo +1.99.1 tree --locked --features desktop-x11 --target x86_64-unknown-linux-gnu -e features -i eframe | tee "$folder/eframe-features.txt"
+          cargo +1.99.1 tree --locked --features desktop-x11 --target x86_64-unknown-linux-gnu -e normal,build --prefix none --format '{p}' > "$folder/dependency-tree.txt"
+          grep -F 'eframe feature "glow"' "$folder/eframe-features.txt"
+          if grep -F 'eframe feature "wgpu"' "$folder/eframe-features.txt" || grep -Eq '^wgpu v' "$folder/dependency-tree.txt"; then
+            echo 'The Linux native-capture target must retain the existing glow renderer' >&2
+            exit 1
+          fi
+          git diff --exit-code -- Cargo.lock
+      - name: Test PNG gates and all font source/desktop code
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/test_ci_native_capture.py
+          cargo +1.99.1 test --locked --features desktop-x11
+      - name: Build the real native editor with opt-in X11 support
+        run: cargo +1.99.1 build --locked --features desktop-x11 --bin fontstrike-desktop
+      - name: Capture the real OpenGL window under Xvfb
+        shell: bash
+        run: |
+          set -euo pipefail
+          folder="$RUNNER_TEMP/fontstrike-linux-native"
+          mkdir -p "$folder" "$RUNNER_TEMP/fontstrike-xdg-runtime"
+          chmod 700 "$RUNNER_TEMP/fontstrike-xdg-runtime"
+          export XDG_RUNTIME_DIR="$RUNNER_TEMP/fontstrike-xdg-runtime"
+          unset WAYLAND_DISPLAY
+          xvfb-run -a -s '-screen 0 1440x900x24 -nolisten tcp' bash -c '
+            set -euo pipefail
+            glxinfo -B > "$RUNNER_TEMP/fontstrike-linux-native/glxinfo.txt"
+            python3 tools/ci_native_capture.py target/debug/fontstrike-desktop "$RUNNER_TEMP/fontstrike-linux-native"
+          '
+          git diff --exit-code -- Cargo.lock
+      - name: Preserve bounded Linux-native evidence separately from Windows
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: fontstrike-linux-native-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            ${{ runner.temp }}/fontstrike-linux-native/*.png
+            ${{ runner.temp }}/fontstrike-linux-native/*-stdout.txt
+            ${{ runner.temp }}/fontstrike-linux-native/*-stderr.txt
+            ${{ runner.temp }}/fontstrike-linux-native/provenance.json
+            ${{ runner.temp }}/fontstrike-linux-native/glxinfo.txt
+            ${{ runner.temp }}/fontstrike-linux-native/eframe-features.txt
+            ${{ runner.temp }}/fontstrike-linux-native/dependency-tree.txt
+          retention-days: 7
+          if-no-files-found: warn
