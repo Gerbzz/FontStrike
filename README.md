@@ -21,6 +21,12 @@
   <a href="#credits-and-licences">Credits</a>
 </p>
 
+## Rust direction and migration status
+
+- **Target:** A Rust-native font editor, extending the existing implementation rather than starting another language rewrite.
+- **Current implementation:** The [Cargo package](Cargo.toml), [font library](src/lib.rs) and [egui desktop editor](src/bin/desktop.rs) are already Rust. FontStrike builds its own UFO editing workflow using Rust libraries and an attributed VectorCraft path model.
+- **Remaining migration:** Continue feature development and acceptance of that Rust implementation. Broader source/export formats, production-size fonts, native interaction, accessibility and packaging remain open; the engineering preview is not a completed font-production tool.
+
 ![FontStrike editing the synthetic test font: glyph grid, the A outline with its counter, metric guides, inspector with metrics and kerning, and a kerned text preview](docs/screenshots/editor-A.png)
 
 *The running app editing **FontStrike Test Sans (Synthetic)**, a test font drawn from
