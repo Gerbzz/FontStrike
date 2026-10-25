@@ -13,6 +13,13 @@ jobs:
       CARGO_PROFILE_DEV_DEBUG: '0'
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install branding inspection dependency
+        run: python -m pip install Pillow==12.3.0
+      - name: Verify approved logo bytes and runtime bindings
+        run: python scripts/check_approved_branding.py
       - name: Test font source and desktop code
         run: cargo test --locked --features desktop
       - name: Build native capture target
